@@ -1,0 +1,394 @@
+---
+title: 'Reservas'
+description: 'Ciclo de vida completo de una Reserva en Nous Academy: estados, transiciones, inicio, finalización, cancelación y calificación.'
+---
+
+Una `Reserva` es el objeto central que une una `Clase` (grupal o personalizada) con sus participantes — un `Docente` y uno o varios `Estudiante`s. Gestiona el ciclo de vida completo de la sesión desde que se crea hasta que se califica.
+
+## Campos principales
+
+| Campo                  | Tipo               | Descripción                                                    |
+|------------------------|--------------------|----------------------------------------------------------------|
+| `horaInicioEsperada`   | `LocalDateTime`    | Hora planificada de inicio.                                    |
+| `horaCierreEsperada`   | `LocalDateTime`    | Hora planificada de cierre (`horaInicio + duracion` minutos).  |
+| `horaInicioReal`       | `LocalDateTime`    | Hora real en que el docente inició la clase.                   |
+| `horaCierreReal`       | `LocalDateTime`    | Hora real en que el docente finalizó la clase.                 |
+| `duracionReal`         | `float`            | Minutos reales de clase (`horaInicioReal` → `horaCierreReal`). |
+| `estudiantes`          | `Estudiante[]`     | Estudiantes inscritos (pueden reservar).                       |
+| `asistentes`           | `Estudiante[]`     | Estudiantes que se unieron durante la sesión `EN_CURSO`.       |
+| `docente`              | `Docente`          | Docente asignado a la reserva.                                 |
+| `estadoReserva`        | `EstadoReserva`    | Estado actual de la reserva.                                   |
+| `estadoDocente`        | `EstadoDocente`    | Estado de la asignación del docente.                           |
+| `calificacionGeneral`  | `float`            | Promedio de las calificaciones individuales.                   |
+| `calificada`           | `boolean`          | Indica si al menos un estudiante ya calificó.                  |
+
+## Estados de la reserva (`EstadoReserva`)
+
+```java
+// EstadoReserva.java
+public enum EstadoReserva {
+    PENDIENTE,
+    EN_CURSO,
+    CANCELADA,
+    EXITOSA,
+    LLENA,
+    SANCIONADA,
+    PREMATURA,
+    TARDE;
+}
+```
+
+### Tabla de estados y transiciones
+
+| Estado       | Descripción                                                                                  | Transiciones posibles                                      |
+|--------------|----------------------------------------------------------------------------------------------|------------------------------------------------------------|
+| `PENDIENTE`  | Reserva creada, esperando inicio.                                                            | → `EN_CURSO`, `LLENA`, `CANCELADA`, `TARDE`                |
+| `LLENA`      | Aforo máximo alcanzado (grupal) o estudiante inscrito (personalizada).                       | → `EN_CURSO`, `TARDE`, `CANCELADA`                         |
+| `EN_CURSO`   | Clase iniciada por el docente.                                                               | → `EXITOSA`, `PREMATURA`                                   |
+| `EXITOSA`    | Clase finalizada correctamente; `docente.trabajoDocente()` fue llamado.                      | (estado final — permite calificación)                      |
+| `PREMATURA`  | Clase finalizada más de 25 min antes de lo previsto.                                         | (estado final — permite calificación)                      |
+| `TARDE`      | Docente intentó iniciar más de 10 min después de `horaInicioEsperada`.                       | (estado final — permite calificación)                      |
+| `CANCELADA`  | Cancelación por el estudiante (> 30 min antes) o cancelación administrativa.                | (estado final)                                             |
+| `SANCIONADA` | Estado reservado para sanciones (definido en el enum, sin transición automática actual).    | —                                                          |
+
+## Estado del docente (`EstadoDocente`)
+
+```java
+// EstadoDocente.java
+public enum EstadoDocente {
+    ACEPTADA,
+    EN_ESPERA,
+    DENEGADA;
+}
+```
+
+| Estado      | Descripción                                                    |
+|-------------|----------------------------------------------------------------|
+| `EN_ESPERA` | Sin docente asignado (estado inicial o tras cancelar docente). |
+| `ACEPTADA`  | Docente asignado exitosamente mediante `asignarDocente()`.     |
+| `DENEGADA`  | Asignación rechazada (valor disponible en el enum).            |
+
+## Ciclo de vida detallado
+
+### 1. Creación
+
+Una reserva se crea con estado `PENDIENTE`. Los constructores validan que la fecha de inicio sea futura y que los valores numéricos sean positivos.
+
+<Tabs>
+  <Tab title="Clase grupal (admin)">
+    ```java
+    // Reserva.java — constructor grupal
+    public Reserva(LocalDateTime horaInicioEsperada, String titulo, String descripcion,
+                   String tema, float duracion, int aforoMin, int aforoMax)
+            throws ElementosVacios, AforoIncompatible, FechaInvalida, ValoresNegativos {
+
+        if (horaInicioEsperada.isBefore(LocalDateTime.now())) {
+            throw new FechaInvalida();
+        }
+        if (aforoMin < 0 || aforoMax < 0 || duracion < 0) {
+            throw new ValoresNegativos();
+        }
+        this.horaInicioEsperada = horaInicioEsperada;
+        this.horaCierreEsperada = horaInicioEsperada.plusMinutes((long) duracion);
+        this.clase = new ClaseGrupal(titulo, descripcion, tema, duracion, aforoMin, aforoMax);
+        this.estadoReserva = EstadoReserva.PENDIENTE;
+    }
+    ```
+  </Tab>
+  <Tab title="Clase personalizada (estudiante)">
+    ```java
+    // Reserva.java — constructor personalizado
+    public Reserva(LocalDateTime horaInicioEsperada, String titulo, String descripcion,
+                   String tema, float duracion, String info)
+            throws ElementosVacios, FechaInvalida, ValoresNegativos {
+
+        if (horaInicioEsperada.isBefore(LocalDateTime.now())) {
+            throw new FechaInvalida();
+        }
+        if (duracion < 0) {
+            throw new ValoresNegativos();
+        }
+        this.horaInicioEsperada = horaInicioEsperada;
+        this.horaCierreEsperada = horaInicioEsperada.plusMinutes((long) duracion);
+        this.clase = new ClasePersonalizada(titulo, descripcion, tema, duracion, info);
+        this.estadoReserva = EstadoReserva.PENDIENTE;
+    }
+    ```
+  </Tab>
+</Tabs>
+
+### 2. Inscripción del estudiante (`reservarEstudiante`)
+
+El estudiante se inscribe en la reserva. Si es una clase personalizada, la reserva pasa a `LLENA` de inmediato. Si es grupal, pasa a `LLENA` cuando `estudiantes.length == aforoMaximo`.
+
+```java
+// Reserva.java
+public void reservarEstudiante(Estudiante estudiante)
+        throws ClasesPrivadasNoSuficientes, ClaseYaReservada, ClaseLlena {
+
+    if (this.estadoReserva == EstadoReserva.LLENA) {
+        throw new ClaseLlena();
+    }
+    estudiante.reservarClase(this.clase); // valida y descuenta crédito privado si aplica
+    this.estudiantes = Arrays.copyOf(this.estudiantes, this.estudiantes.length + 1);
+    this.estudiantes[this.estudiantes.length - 1] = estudiante;
+
+    if (this.clase instanceof ClaseGrupal) {
+        ClaseGrupal c = (ClaseGrupal) this.clase;
+        if (this.estudiantes.length == c.getAforoMaximo()) {
+            this.estadoReserva = EstadoReserva.LLENA;
+        }
+    } else if (this.clase instanceof ClasePersonalizada) {
+        this.estadoReserva = EstadoReserva.LLENA;
+    }
+}
+```
+
+### 3. Inicio de la clase (`iniciarClase`)
+
+El docente inicia la sesión. La ventana válida va desde **5 minutos antes** hasta **10 minutos después** de `horaInicioEsperada`.
+
+```java
+// Reserva.java
+public void iniciarClase()
+        throws DocenteRetardado, ClaseEnEstadoNoIniciar, NoSuficienteAforo {
+
+    LocalDateTime inicio = LocalDateTime.now();
+
+    if (inicio.isAfter(this.horaInicioEsperada.plusMinutes(10))) {
+        this.estadoReserva = EstadoReserva.TARDE;
+        throw new DocenteRetardado();
+    }
+
+    if (inicio.isBefore(this.horaInicioEsperada.minusMinutes(5))) {
+        throw new ClaseEnEstadoNoIniciar();
+    }
+
+    if (this.clase instanceof ClaseGrupal) {
+        ClaseGrupal c = (ClaseGrupal) this.clase;
+        if (this.estudiantes.length < c.getAforoMinimo()) {
+            throw new NoSuficienteAforo();
+        }
+    }
+
+    this.horaInicioReal = inicio;
+    this.estadoReserva = EstadoReserva.EN_CURSO;
+}
+```
+
+| Condición de inicio                          | Resultado                                        |
+|----------------------------------------------|--------------------------------------------------|
+| Más de 5 min antes de `horaInicioEsperada`   | `ClaseEnEstadoNoIniciar` — demasiado pronto.     |
+| Entre −5 min y +10 min de `horaInicioEsperada` | Inicio correcto → estado `EN_CURSO`.           |
+| Más de 10 min después de `horaInicioEsperada`  | Estado → `TARDE` + `DocenteRetardado`.         |
+| Grupal con menos inscritos que `aforoMinimo`   | `NoSuficienteAforo`.                           |
+
+<Warning>
+  Cuando el docente llega tarde (> 10 min), el estado pasa inmediatamente a `TARDE` aunque se lance la excepción. La clase queda en ese estado final.
+</Warning>
+
+### 4. Unirse a la clase (`unirseClase`)
+
+Un estudiante ya inscrito puede unirse a la sesión mientras está `EN_CURSO`. Unirse lo añade al array `asistentes`, que es el requisito para poder calificar después.
+
+```java
+// Reserva.java
+public void unirseClase(Estudiante estudiante)
+        throws ClaseEnEstadoNoUnirse, EstudianteNoEnlistadoEnReserva {
+
+    int i = 0;
+    while (i < this.estudiantes.length && this.estudiantes[i] != estudiante) {
+        i++;
+    }
+    if (i == this.estudiantes.length) {
+        throw new EstudianteNoEnlistadoEnReserva(); // no está en estudiantes[]
+    }
+    if (this.estadoReserva != EstadoReserva.EN_CURSO) {
+        throw new ClaseEnEstadoNoUnirse();
+    }
+    this.asistentes = Arrays.copyOf(this.asistentes, this.asistentes.length + 1);
+    this.asistentes[this.asistentes.length - 1] = estudiante;
+}
+```
+
+<Note>
+  Un estudiante debe estar en `estudiantes[]` (inscrito) para poder unirse. Unirse lo añade a `asistentes[]`, que es el array que habilita la calificación posterior.
+</Note>
+
+### 5. Finalización de la clase (`finalizarClase`)
+
+El docente cierra la sesión. La clase debe estar en estado `EN_CURSO`; de lo contrario se lanza `ClaseNuncaIniciada`. Si la duración real es inferior a `duracion - 25` minutos, se considera finalización prematura.
+
+```java
+// Reserva.java
+public void finalizarClase()
+        throws ClaseNuncaIniciada, FinalizacionPrematuraDeReserva {
+
+    if (this.estadoReserva != EstadoReserva.EN_CURSO) {
+        throw new ClaseNuncaIniciada();
+    }
+    this.horaCierreReal = LocalDateTime.now();
+    this.duracionReal = (float) this.horaInicioReal
+            .until(this.horaCierreReal, ChronoUnit.MINUTES);
+
+    if (this.duracionReal < this.clase.getDuracion() - 25) {
+        this.estadoReserva = EstadoReserva.PREMATURA;
+        for (Estudiante e : this.estudiantes) {
+            e.claseFinalizada();
+        }
+        throw new FinalizacionPrematuraDeReserva(); // sanción: terminó > 25 min antes
+    }
+
+    if (this.estadoReserva != EstadoReserva.PREMATURA
+            && this.estadoReserva != EstadoReserva.TARDE) {
+        this.estadoReserva = EstadoReserva.EXITOSA;
+    }
+    for (Estudiante e : this.estudiantes) {
+        e.claseFinalizada();
+    }
+    if (this.estadoReserva == EstadoReserva.EXITOSA) {
+        this.docente.trabajoDocente(this); // registra horas trabajadas al docente
+    }
+}
+```
+
+| Condición de finalización                              | Resultado                                                          |
+|--------------------------------------------------------|-----------------------------------------------------------------|
+| Estado no es `EN_CURSO`                                | `ClaseNuncaIniciada`.                                           |
+| `duracionReal < duracion - 25` min                     | Estado → `PREMATURA` + `FinalizacionPrematuraDeReserva`.        |
+| Finalización dentro del margen permitido               | Estado → `EXITOSA`; se llama `docente.trabajoDocente(this)`.    |
+| Estado ya era `TARDE` (docente llegó tarde pero inició)| Se mantiene `TARDE`; `docente.trabajoDocente()` no se llama.    |
+
+<Warning>
+  Terminar la clase 25 o más minutos antes de lo planificado activa la excepción `FinalizacionPrematuraDeReserva` y deja la reserva en estado `PREMATURA`. Los estudiantes reciben la notificación de clase finalizada igualmente.
+</Warning>
+
+### 6. Cancelación por el estudiante (`cancelarReserva`)
+
+El estudiante puede cancelar su inscripción siempre que falten más de 30 minutos para `horaInicioEsperada`.
+
+```java
+// Reserva.java
+public void cancelarReserva(Estudiante estudiante)
+        throws EstudianteNoEnlistadoEnReserva, ClaseEnEstadoNoCancelar,
+               ClaseNoEnEstudiante {
+
+    // ... búsqueda del estudiante en estudiantes[] ...
+
+    if (LocalDateTime.now().isAfter(
+            this.horaInicioEsperada.minusMinutes(30))) {
+        throw new ClaseEnEstadoNoCancelar(); // menos de 30 min: no se puede cancelar
+    }
+
+    // elimina al estudiante de estudiantes[] y asistentes[] si aplica
+    // ...
+
+    if (this.clase instanceof ClasePersonalizada) {
+        this.estadoReserva = EstadoReserva.CANCELADA;
+    }
+    estudiante.cancelarReserva(this.getClase()); // devuelve crédito privado si aplica
+    estudiante.claseFinalizada();
+}
+```
+
+| Condición                                     | Resultado                                                         |
+|-----------------------------------------------|-------------------------------------------------------------------|
+| Faltan > 30 min para el inicio                | Cancelación exitosa. Crédito privado devuelto si es personalizada. |
+| Faltan ≤ 30 min para el inicio                | `ClaseEnEstadoNoCancelar` — no se puede cancelar.                 |
+| Estudiante no está inscrito                   | `EstudianteNoEnlistadoEnReserva`.                                 |
+
+### 7. Calificación (`calificarClase`)
+
+Un estudiante puede calificar la clase con una puntuación de 1 a 5 si cumple todas las condiciones:
+
+- Debe estar en `asistentes[]` (haberse unido durante la sesión).
+- El estado de la reserva debe ser `EXITOSA`, `PREMATURA` o `TARDE`.
+- La calificación debe estar entre 1 y 5 (ambos inclusive).
+
+```java
+// Reserva.java
+public void calificarClase(Estudiante estudiante, float calificacion)
+        throws ClaseEnEstadoNOCalificar, EstudianteNoEnlistadoEnReserva,
+               CalificacionInvalida {
+
+    // búsqueda en asistentes[]
+    int i = 0;
+    while (i < this.asistentes.length && this.asistentes[i] != estudiante) {
+        i++;
+    }
+
+    if (calificacion < 1 || calificacion > 5) {
+        throw new CalificacionInvalida();
+    }
+    if (i == this.asistentes.length) {
+        throw new EstudianteNoEnlistadoEnReserva(); // no se unió a la clase
+    }
+    if (this.estadoReserva != EstadoReserva.EXITOSA
+            && this.estadoReserva != EstadoReserva.PREMATURA
+            && this.estadoReserva != EstadoReserva.TARDE) {
+        throw new ClaseEnEstadoNOCalificar();
+    }
+
+    this.calificacionIndividual = Arrays.copyOf(
+            this.calificacionIndividual,
+            this.calificacionIndividual.length + 1);
+    this.calificacionIndividual[
+            this.calificacionIndividual.length - 1] = calificacion;
+    this.actualizarCalificacionGeneral();
+    this.calificada = true;
+    this.docente.calificacionDocente(); // actualiza métricas del docente
+}
+```
+
+| Condición                                             | Excepción                          |
+|-------------------------------------------------------|------------------------------------|
+| `calificacion < 1` o `calificacion > 5`               | `CalificacionInvalida`             |
+| Estudiante no está en `asistentes[]`                  | `EstudianteNoEnlistadoEnReserva`   |
+| Estado no es `EXITOSA`, `PREMATURA` ni `TARDE`        | `ClaseEnEstadoNOCalificar`         |
+
+<Tip>
+  Varios estudiantes pueden calificar la misma reserva. La `calificacionGeneral` se recalcula como el promedio aritmético de todas las calificaciones individuales recibidas.
+</Tip>
+
+## Cancelación administrativa
+
+El administrador puede cancelar una reserva en cualquier momento. Esto invoca `cancelacionAdministrativa()`, que pone el estado a `CANCELADA` y notifica a todos los estudiantes inscritos, y luego elimina el fichero `.res` del disco:
+
+```java
+// Reserva.java
+public void cancelacionAdministrativa() {
+    this.estadoReserva = EstadoReserva.CANCELADA;
+    for (Estudiante e : this.estudiantes) {
+        e.claseFinalizada();
+    }
+}
+
+// AcademiaController.java
+public void eliminarReserva(String codigo) throws ElementoNoExistente {
+    // ...
+    this.reservas[i].cancelacionAdministrativa();
+    File f = new File(base + reservas[i].getCodigo() + ".res");
+    f.delete();
+    // elimina la reserva del array
+}
+```
+
+## Persistencia
+
+Cada vez que el estado de la reserva cambia, se sobrescribe el fichero correspondiente:
+
+```
+datos/PB-001.res   ← Reserva grupal serializada
+datos/PV-001.res   ← Reserva personalizada serializada
+```
+
+```java
+// Reserva.java
+public void copiarFicheroReserva(String dir) throws IOException {
+    FileOutputStream f = new FileOutputStream(dir);
+    ObjectOutputStream b = new ObjectOutputStream(f);
+    b.writeObject((Reserva) this);
+    b.close();
+    f.close();
+}
+```

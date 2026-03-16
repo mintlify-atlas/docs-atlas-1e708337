@@ -1,0 +1,240 @@
+---
+title: 'Gestión de grupos'
+description: 'Guía paso a paso para crear, modificar y eliminar grupos, y para administrar sus estudiantes, docentes y reservas.'
+---
+
+## Crear un grupo
+
+<Steps>
+  <Step title="Proporcionar nombre y descripción">
+    El administrador invoca `crearGrupo()` con un nombre y una descripción. Ambos campos son obligatorios; si cualquiera de ellos está vacío el constructor lanza `ElementosVacios`.
+
+    ```java
+    // modelo/Grupo.java — constructor
+    public Grupo(String nombre, String descripcion) throws ElementosVacios {
+        if (nombre.isEmpty() || descripcion.isEmpty()) {
+            throw new ElementosVacios();
+        }
+        this.codigo = this.generarCodigo("GRUP");
+        this.nombre = nombre;
+        this.descripcion = descripcion;
+    }
+    ```
+  </Step>
+
+  <Step title="El controlador registra y persiste el grupo">
+    `AcademiaController.crearGrupo()` añade el nuevo grupo al arreglo `grupos[]` y guarda el objeto serializado en `datos/<codigo>.grp`.
+
+    ```java
+    // controller/AcademiaController.java
+    public void crearGrupo(String nombre, String descripcion)
+            throws ElementosVacios, IOException {
+        Grupo g = new Grupo(nombre, descripcion);
+        this.grupos = Arrays.copyOf(this.grupos, this.grupos.length + 1);
+        this.grupos[this.grupos.length - 1] = g;
+        g.copiarFicheroGrupo(base + g.getCodigo() + ".grp");
+    }
+    ```
+  </Step>
+</Steps>
+
+## Actualizar un grupo
+
+El administrador puede modificar el nombre y la descripción en cualquier momento. Los campos que se envíen vacíos no se actualizan.
+
+```java
+// controller/AcademiaController.java
+public void actualizarGrupo(String codigo, String nombre, String descripcion)
+        throws ElementoNoExistente, IOException {
+    Grupo g = buscarUnGrupo(codigo);
+    if (!(descripcion.isEmpty())) g.setDescripcion(descripcion);
+    if (!(nombre.isEmpty()))      g.setNombre(nombre);
+    g.copiarFicheroGrupo(base + g.getCodigo() + ".grp");
+}
+```
+
+## Añadir y retirar estudiantes
+
+Las acciones de inscripción y baja **las ejecuta el propio estudiante** autenticado, no el administrador.
+
+<Tabs>
+  <Tab title="Unirse a un grupo">
+    El controlador localiza el grupo por código y delega en `anadirEstudiante()`. La operación actualiza tanto el arreglo `estudiantes[]` del grupo como el arreglo `grupos[]` del estudiante.
+
+    ```java
+    // controller/AcademiaController.java
+    public void entrarGrupo(Estudiante estudiante, String codigo)
+            throws ElementoNoExistente, CantidadGruposExcedida, IOException, Duplicados {
+        Grupo g = this.buscarUnGrupo(codigo);
+        g.anadirEstudiante(estudiante);   // lanza CantidadGruposExcedida o Duplicados
+        estudiante.copiarFicheroUsuario(
+            base + estudiante.getTipoDocumento().name().substring(0, 2)
+                 + estudiante.getNumeroDocumento() + ".est");
+        g.copiarFicheroGrupo(base + g.getCodigo() + ".grp");
+    }
+    ```
+
+    **Excepciones posibles:**
+
+    | Excepción | Causa |
+    |---|---|
+    | `ElementoNoExistente` | El código de grupo no existe |
+    | `CantidadGruposExcedida` | El estudiante ya pertenece a 4 grupos |
+    | `Duplicados` | El estudiante ya está inscrito en ese grupo |
+  </Tab>
+
+  <Tab title="Salirse de un grupo">
+    El controlador localiza el grupo, llama a `eliminarEstudiante()` y persiste ambos ficheros.
+
+    ```java
+    // controller/AcademiaController.java
+    public void salirseGrupo(Estudiante estudiante, String codigo)
+            throws ElementoNoExistente, GrupoNoEncontrado,
+                   EstudianteNoEnGrupo, IOException {
+        Grupo g = this.buscarUnGrupo(codigo);
+        g.eliminarEstudiante(estudiante);  // lanza EstudianteNoEnGrupo si no está
+        estudiante.copiarFicheroUsuario(
+            base + estudiante.getTipoDocumento().name().substring(0, 2)
+                 + estudiante.getNumeroDocumento() + ".est");
+        g.copiarFicheroGrupo(base + g.getCodigo() + ".grp");
+    }
+    ```
+  </Tab>
+</Tabs>
+
+<Note>
+Ambas operaciones persisten **dos ficheros**: el `.est` del estudiante y el `.grp` del grupo, para mantener la coherencia en disco.
+</Note>
+
+## Añadir y retirar docentes
+
+Esta operación **la realiza el administrador**. No hay límite en la cantidad de docentes por grupo.
+
+<Tabs>
+  <Tab title="Añadir docente">
+    ```java
+    // controller/AcademiaController.java
+    public void añadirDocente(TipoDocumento tipoDocumento,
+                              String numeroDocumento, String codigo)
+            throws ElementoNoExistente, IOException {
+        Docente d = buscarUnDocente(tipoDocumento, numeroDocumento);
+        Grupo   g = buscarUnGrupo(codigo);
+        g.anadirDocente(d);
+        g.copiarFicheroGrupo(base + g.getCodigo() + ".grp");
+        d.copiarFicheroUsuario(
+            base + d.getTipoDocumento().name().substring(0, 2)
+                 + d.getNumeroDocumento() + ".doce");
+    }
+    ```
+  </Tab>
+
+  <Tab title="Eliminar docente">
+    Lanza `DocenteNoEnGrupo` si el docente no pertenece al grupo.
+
+    ```java
+    // controller/AcademiaController.java
+    public void eliminarDocente(TipoDocumento tipoDocumento,
+                                String numeroDocumento, String codigo)
+            throws ElementoNoExistente, DocenteNoEnGrupo, IOException {
+        Grupo   g = buscarUnGrupo(codigo);
+        Docente d = buscarUnDocente(tipoDocumento, numeroDocumento);
+        g.eliminarDocente(d);
+        g.copiarFicheroGrupo(base + g.getCodigo() + ".grp");
+        d.copiarFicheroUsuario(
+            base + d.getTipoDocumento().name().substring(0, 2)
+                 + d.getNumeroDocumento() + ".doce");
+    }
+    ```
+
+    La lógica interna de `Grupo.eliminarDocente()` sustituye la posición del docente eliminado por el último elemento del arreglo antes de reducir su tamaño:
+
+    ```java
+    // modelo/Grupo.java
+    public void eliminarDocente(Docente docente) throws DocenteNoEnGrupo {
+        int i = 0;
+        while (i < this.docentes.length && this.docentes[i] != docente) {
+            i++;
+        }
+        if (i == this.docentes.length) {
+            throw new DocenteNoEnGrupo();
+        }
+        this.docentes[i] = this.docentes[this.docentes.length - 1];
+        this.docentes = Arrays.copyOf(this.docentes, this.docentes.length - 1);
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Añadir y retirar reservas
+
+El administrador vincula y desvincula `Reserva` al grupo. Esto hace que la clase sea visible para todos los estudiantes inscritos.
+
+<Tabs>
+  <Tab title="Añadir reserva">
+    ```java
+    // controller/AcademiaController.java
+    public void anadirReserva(String codigoGrupo, String codigoReserva)
+            throws ElementoNoExistente, IOException {
+        Grupo   g = buscarUnGrupo(codigoGrupo);
+        Reserva r = buscarUnaReserva(codigoReserva);
+        g.anadirReserva(r);
+        r.copiarFicheroReserva(base + r.getCodigo() + ".res");
+        g.copiarFicheroGrupo(base + g.getCodigo() + ".grp");
+    }
+    ```
+  </Tab>
+
+  <Tab title="Eliminar reserva">
+    Lanza `ReservaNoEncontradaEnGrupo` si la reserva no está asociada al grupo.
+
+    ```java
+    // controller/AcademiaController.java
+    public void eliminarReserva(String codigoGrupo, String codigoReserva)
+            throws ElementoNoExistente, ReservaNoEncontradaEnGrupo, IOException {
+        Reserva r = buscarUnaReserva(codigoReserva);
+        Grupo   g = buscarUnGrupo(codigoGrupo);
+        g.eliminarReserva(r.getClase().getCodigo());
+        r.copiarFicheroReserva(base + r.getCodigo() + ".res");
+        g.copiarFicheroGrupo(base + g.getCodigo() + ".grp");
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Persistencia
+
+Cada grupo se serializa como un fichero binario en el directorio `datos/`.
+
+```java
+// modelo/Grupo.java
+public void copiarFicheroGrupo(String dir) throws IOException {
+    FileOutputStream f = new FileOutputStream(dir);
+    ObjectOutputStream b = new ObjectOutputStream(f);
+    b.writeObject((Grupo) this);
+    b.close();
+    f.close();
+}
+```
+
+| Entidad | Extensión | Ejemplo |
+|---|---|---|
+| Grupo | `.grp` | `datos/GRUP001.grp` |
+| Estudiante | `.est` | `datos/CC12345678.est` |
+| Docente | `.doce` | `datos/CC87654321.doce` |
+
+<Tip>
+Cada operación que modifica un grupo persiste **inmediatamente** el fichero en disco. No hay paso de guardado manual separado.
+</Tip>
+
+## Resumen de excepciones
+
+| Excepción | Operación que la lanza |
+|---|---|
+| `ElementosVacios` | `crearGrupo()` cuando nombre o descripción están vacíos |
+| `ElementoNoExistente` | Cualquier búsqueda por código que no encuentre el grupo |
+| `CantidadGruposExcedida` | `entrarGrupo()` cuando el estudiante ya está en 4 grupos |
+| `Duplicados` | `entrarGrupo()` cuando el estudiante ya pertenece al grupo |
+| `EstudianteNoEnGrupo` | `salirseGrupo()` cuando el estudiante no está inscrito |
+| `DocenteNoEnGrupo` | `eliminarDocente()` cuando el docente no pertenece al grupo |
+| `ReservaNoEncontradaEnGrupo` | `eliminarReserva()` cuando la reserva no está en el grupo |
+| `GrupoNoEncontrado` | `eliminacionAdministrativa()` cuando un estudiante ya no tiene el grupo |

@@ -1,0 +1,287 @@
+---
+title: Estudiantes
+description: Documentación del tipo de usuario Estudiante en NOUS ACADEMY — campos extendidos, membresías, reservas de clases, grupos y persistencia en disco.
+---
+
+El **Estudiante** extiende la clase `Usuario` y tiene asignado el rol `TipoUsuario.ESTUDIANTE`. Además de los campos base, gestiona membresías, reservas de clases y grupos de estudio.
+
+## Herencia
+
+```java
+// com/nousacademy/usuarios/Estudiante.java — línea 30
+public class Estudiante extends Usuario implements Serializable
+```
+
+El `Estudiante` hereda todos los campos de `Usuario` (`nombre`, `apellidos`, `telefono`, `correo`, `tipoDocumento`, `numeroDocumento`, `usuario`, `contrasena`) y añade los campos propios descritos a continuación. Las mismas validaciones del constructor de `Usuario` aplican en su totalidad.
+
+## Campos específicos del estudiante
+
+<ResponseField name="membresia" type="Membresia">
+  Membresía activa del estudiante. Inicia en `null` al crear el registro. Se asigna con `asignarMembresia()`.
+</ResponseField>
+
+<ResponseField name="historialMembresias" type="Membresia[]">
+  Arreglo de membresías anteriores. Cada vez que se asigna una nueva membresía, la anterior se cancela y se archiva aquí.
+</ResponseField>
+
+<ResponseField name="historialClases" type="Clase[]">
+  Arreglo de clases en las que el estudiante está inscrito o ha participado.
+</ResponseField>
+
+<ResponseField name="clasesPrivadasRestantes" type="int">
+  Contador de clases privadas disponibles. Se inicializa con el valor de `getClasesPrivadas()` de la membresía activa. Se decrementa en 1 por cada reserva de `ClasePersonalizada`.
+</ResponseField>
+
+<ResponseField name="grupos" type="Grupo[]">
+  Arreglo de grupos a los que pertenece el estudiante. El máximo es **4 grupos**.
+</ResponseField>
+
+<ResponseField name="cantidadDeGrupos" type="int">
+  Cantidad actual de grupos. Se actualiza automáticamente por `actualizarCantidadGrupos()`.
+</ResponseField>
+
+<ResponseField name="reservado" type="boolean">
+  Indica si el estudiante tiene una reserva activa. Un estudiante solo puede tener una reserva activa a la vez.
+</ResponseField>
+
+## Constructor
+
+```java
+// com/nousacademy/usuarios/Estudiante.java — línea 45
+public Estudiante(
+    String nombre, String apellidos, String telefono, String correo,
+    TipoDocumento tipoDocumento, String numeroDocumento,
+    String usuario, String contrasena)
+    throws ElementosVacios, CorreoNoValido, NombreNoValido, ValoresNegativos, LongitudNoValida {
+
+    super(nombre, apellidos, telefono, correo, tipoDocumento, numeroDocumento, usuario, contrasena);
+    this.tipoUsuario = TipoUsuario.ESTUDIANTE;
+    this.historialMembresias = new Membresia[0];
+    this.historialClases = new Clase[0];
+    this.grupos = new Grupo[0];
+    this.cantidadDeGrupos = 0;
+    this.reservado = false;
+    this.membresia = null;
+}
+```
+
+Los campos específicos del estudiante no se reciben en el constructor: se asignan posteriormente mediante los métodos del controlador.
+
+## Comportamientos clave
+
+### Solo una reserva activa
+
+El flag `reservado` garantiza que el estudiante no pueda inscribirse en más de una clase al mismo tiempo:
+
+```java
+// com/nousacademy/usuarios/Estudiante.java — línea 205
+public void reservarClase(Clase clase) throws ClaseYaReservada, ClasesPrivadasNoSuficientes {
+    if (this.reservado) {
+        throw new ClaseYaReservada();
+    }
+    if (clase instanceof ClasePersonalizada) {
+        this.actualizarPrivadasRestantes(); // decrementa clasesPrivadasRestantes
+    }
+    this.historialClases = Arrays.copyOf(this.historialClases, this.historialClases.length + 1);
+    this.historialClases[this.historialClases.length - 1] = clase;
+    this.reservado = true;
+}
+```
+
+<Warning>
+  Si el estudiante ya tiene una reserva activa (`reservado = true`), cualquier intento de reservar otra clase lanzará `ClaseYaReservada`. La reserva debe cancelarse o finalizarse antes de poder reservar de nuevo.
+</Warning>
+
+### Decremento de clases privadas
+
+Cuando se reserva una `ClasePersonalizada`, el contador `clasesPrivadasRestantes` se reduce en 1. Si el contador ya es 0, se lanza `ClasesPrivadasNoSuficientes`:
+
+```java
+// com/nousacademy/usuarios/Estudiante.java — línea 195
+public void actualizarPrivadasRestantes() throws ClasesPrivadasNoSuficientes {
+    if (this.clasesPrivadasRestantes == 0) {
+        throw new ClasesPrivadasNoSuficientes();
+    }
+    this.clasesPrivadasRestantes -= 1;
+}
+```
+
+### Límite de grupos
+
+El estudiante no puede pertenecer a más de 4 grupos simultáneamente:
+
+```java
+// com/nousacademy/usuarios/Estudiante.java — línea 162
+public void addGrupo(Grupo grupo) throws CantidadGruposExcedida {
+    if (this.cantidadDeGrupos == 4) {
+        throw new CantidadGruposExcedida();
+    }
+    // ...
+}
+```
+
+## Métodos del controlador
+
+### Gestión del perfil
+
+<Tabs>
+  <Tab title="Crear">
+    ```java
+    // AcademiaController.java — línea 389
+    public void crearEstudiante(
+        String nombre, String apellidos, String telefono,
+        String correo, TipoDocumento tipoDocumento, String numeroDocumento,
+        String usuario, String contrasena)
+        throws ElementosVacios, CorreoNoValido, NombreNoValido,
+               IOException, ValoresNegativos, LongitudNoValida, Duplicados
+    ```
+    Valida duplicados por documento y por nombre de usuario antes de crear el registro. Persiste el fichero `.est` en `datos/`.
+  </Tab>
+  <Tab title="Actualizar">
+    ```java
+    // AcademiaController.java — línea 430
+    public void actualizarEstudiante(
+        TipoDocumento originalTD, String originalND,
+        String nombre, String apellidos, String telefono,
+        String correo, TipoDocumento tipoDocumento, String numeroDocumento)
+        throws CorreoNoValido, NombreNoValido, ElementoNoExistente, IOException, ValoresNegativos
+    ```
+    Solo modifica los campos no vacíos. Elimina el fichero anterior y escribe uno nuevo con los identificadores actualizados.
+  </Tab>
+  <Tab title="Eliminar">
+    ```java
+    // AcademiaController.java — línea 413
+    public void eliminarEstudiante(TipoDocumento tipoDocumento, String numeroDocumento)
+        throws ElementoNoExistente
+    ```
+    Elimina el fichero `.est` correspondiente y compacta el arreglo `estudiantes[]`.
+  </Tab>
+  <Tab title="Leer">
+    ```java
+    // AcademiaController.java — línea 471
+    public Estudiante[] leerEstudiantes()
+    ```
+    Devuelve una copia defensiva del arreglo `estudiantes[]`.
+  </Tab>
+</Tabs>
+
+### Gestión de membresías
+
+<AccordionGroup>
+  <Accordion title="asignarMembresiaDefinida()">
+    Asigna una membresía de tipo predefinido (`TipoMembresia`).
+
+    ```java
+    // AcademiaController.java — línea 507
+    public void asignarMembresiaDefinida(
+        TipoDocumento tipoDocumento, String numeroDocumento,
+        TipoMembresia tipo, LocalDate fechaInicio, int meses)
+        throws FechaInvalida, ValoresNegativos, TipoMembresiaInvalida,
+               EstadoMembresiaInvalido, ElementoNoExistente, IOException
+    ```
+
+    Si el estudiante ya tiene una membresía activa, esta se cancela y se añade al `historialMembresias`. El capital de la academia se actualiza con el impacto comercial de la nueva membresía.
+  </Accordion>
+  <Accordion title="asignarMembresiaPersonalizada()">
+    Asigna una membresía con precio y número de clases privadas personalizados.
+
+    ```java
+    // AcademiaController.java — línea 479
+    public void asignarMembresiaPersonalizada(
+        TipoDocumento tipoDocumento, String numeroDocumento,
+        LocalDate fechaInicio, double precio, int clasesPrivadas, int meses)
+        throws ValoresNegativos, FechaInvalida, EstadoMembresiaInvalido,
+               ElementosVacios, ElementoNoExistente, IOException
+    ```
+
+    Lanza `ElementosVacios` si `fechaInicio` es nula, `precio` es 0 o `meses` es 0.
+  </Accordion>
+  <Accordion title="actualizarEstadoMembresia()">
+    Cambia el estado de la membresía activa del estudiante.
+
+    ```java
+    // AcademiaController.java — línea 533
+    public void actualizarEstadoMembresia(
+        TipoDocumento tipoDocumento, String numeroDocumento, EstadoMembresia estado)
+        throws ElementoNoExistente, EstadoMembresiaInvalido, IOException
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### Gestión de grupos
+
+<Columns cols={2}>
+  <Card title="entrarGrupo()" icon="users">
+    Inscribe al estudiante (sesión activa) en el grupo identificado por `codigo`. Lanza `CantidadGruposExcedida` si ya tiene 4 grupos, o `Duplicados` si ya pertenece al grupo.
+  </Card>
+  <Card title="salirseGrupo()" icon="user-minus">
+    Retira al estudiante del grupo identificado por `codigo`. Actualiza tanto el fichero `.est` como el `.grp`.
+  </Card>
+</Columns>
+
+```java
+// AcademiaController.java — línea 543
+public void entrarGrupo(Estudiante estudiante, String codigo)
+    throws ElementoNoExistente, CantidadGruposExcedida, IOException, Duplicados
+
+// AcademiaController.java — línea 557
+public void salirseGrupo(Estudiante estudiante, String codigo)
+    throws ElementoNoExistente, GrupoNoEncontrado, EstudianteNoEnGrupo, IOException
+```
+
+### Gestión de reservas
+
+```java
+// AcademiaController.java — línea 569
+public void reservarClase(Estudiante estudiante, String codigo)
+    throws ElementoNoExistente, ClasesPrivadasNoSuficientes, ClaseYaReservada, ClaseLlena, IOException
+
+// AcademiaController.java — línea 584
+public void cancelarResrva(Estudiante estudiante, String codigo)
+    throws ElementoNoExistente, EstudianteNoEnlistadoEnReserva,
+           ClaseEnEstadoNoCancelar, ClaseNoEnEstudiante, IOException
+
+// AcademiaController.java — línea 844
+public void calificarReserva(Estudiante estudiante, float calificacion, String codigo)
+    throws ElementoNoExistente, ClaseEnEstadoNOCalificar,
+           EstudianteNoEnlistadoEnReserva, IOException, CalificacionInvalida
+
+// AcademiaController.java — línea 853
+public void unirseReserva(Estudiante estudiante, String codigo)
+    throws ElementoNoExistente, ClaseEnEstadoNoUnirse,
+           EstudianteNoEnlistadoEnReserva, IOException
+```
+
+<Note>
+  Los métodos `reservarClase`, `cancelarResrva`, `calificarReserva` y `unirseReserva` reciben directamente el objeto `Estudiante` del usuario en sesión, no sus credenciales.
+</Note>
+
+## Persistencia en disco
+
+Cada estudiante se serializa en un fichero binario en el directorio `datos/`:
+
+```java
+// com/nousacademy/usuarios/Estudiante.java — línea 242
+public void copiarFicheroEstudiante(String dir) throws IOException {
+    FileOutputStream f = new FileOutputStream(dir);
+    ObjectOutputStream b = new ObjectOutputStream(f);
+    b.writeObject((Estudiante) this);
+    b.close();
+    f.close();
+}
+```
+
+**Convención de nombre de fichero:**
+
+```
+datos/<primeras2letrasDelTipoDocumento><numeroDocumento>.est
+```
+
+**Ejemplos:**
+
+| `tipoDocumento` | `numeroDocumento` | Nombre del fichero      |
+| --------------- | ----------------- | ----------------------- |
+| `CC`            | `10234567`        | `datos/CC10234567.est`  |
+| `CE`            | `98765`           | `datos/CE98765.est`     |
+
+La clase implementa `java.io.Serializable` con `serialVersionUID = 3344556677L`.

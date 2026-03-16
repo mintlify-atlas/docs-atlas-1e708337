@@ -1,0 +1,767 @@
+---
+title: 'Excepciones'
+description: 'Referencia completa de las 37 excepciones del paquete com.nousacademy.excepciones, agrupadas por dominio.'
+---
+
+Todas las excepciones del sistema extienden directamente `java.lang.Exception` (excepciones verificadas). Cada una se lanza cuando una regla de negocio o de validación no se cumple, y su mensaje describe la causa.
+
+**Paquete:** `com.nousacademy.excepciones`  
+**Total:** 37 clases
+
+---
+
+## Validación de campos
+
+Excepciones lanzadas durante la creación o actualización de entidades cuando los datos de entrada no cumplen los requisitos mínimos.
+
+<AccordionGroup>
+
+<Accordion title="ElementosVacios">
+
+**Mensaje:** `"Campos vacios no permitidos"`
+
+Lanzada cuando uno o más campos obligatorios llegan vacíos (`isEmpty()`) o nulos al constructor o a un método de negocio.
+
+```java
+public class ElementosVacios extends Exception {
+    public ElementosVacios() {
+        super("Campos vacios no permitidos");
+    }
+}
+```
+
+**Usada en:** constructores de `Usuario`, `Estudiante`, `Docente`, `Clase`, `Grupo`; métodos `asignarMembresiaPersonalizada`, `actualizarEstadoContrato`, entre otros.
+
+</Accordion>
+
+<Accordion title="NombreNoValido">
+
+**Mensaje:** `"Nombre demasiado corto"`
+
+Lanzada cuando `nombre` o `apellidos` tienen menos de 2 caracteres.
+
+```java
+public class NombreNoValido extends Exception {
+    public NombreNoValido() {
+        super("Nombre demasiado corto");
+    }
+}
+```
+
+**Usada en:** `Usuario` (constructor y `setNombre`, `setApellidos`).
+
+</Accordion>
+
+<Accordion title="CorreoNoValido">
+
+**Mensaje:** `"Los correo deben pertenecer a la organizacion - terminar en: @nousacademy.co"`
+
+Lanzada cuando el correo no contiene `@` o no termina en `nousacademy.co`.
+
+```java
+public class CorreoNoValido extends Exception {
+    public CorreoNoValido() {
+        super("Los correo deben pertenecer a la organizacion - terminar en: @nousacademy.co");
+    }
+}
+```
+
+**Usada en:** `Usuario.setCorreo`, `AcademiaController.setCorreo`.
+
+</Accordion>
+
+<Accordion title="LongitudNoValida">
+
+**Mensaje:** `"Campos con caracteres no suficientes"`
+
+Lanzada cuando `telefono` o `numeroDocumento` tienen menos de 5 caracteres.
+
+```java
+public class LongitudNoValida extends Exception {
+    public LongitudNoValida() {
+        super("Campos con caracteres no suficientes");
+    }
+}
+```
+
+**Usada en:** constructor de `Usuario`.
+
+</Accordion>
+
+<Accordion title="ValoresNegativos">
+
+**Mensaje:** `"Campos con valores negarivos no permitidos"`
+
+Lanzada cuando un campo numérico recibe un valor negativo donde no está permitido (teléfono, número de documento, precio, salario, duración, aforo, etc.).
+
+```java
+public class ValoresNegativos extends Exception {
+    public ValoresNegativos() {
+        super("Campos con valores negarivos no permitidos");
+    }
+}
+```
+
+**Usada en:** `Usuario`, `Membresia`, `Contrato`, `Reserva`, `AcademiaController.setTelefono`, `inyectarCapital`, `retirarCapital`, entre otros.
+
+</Accordion>
+
+<Accordion title="FechaInvalida">
+
+**Mensaje:** `"Fecha no valida, es anterior a la actual"`
+
+Lanzada cuando una fecha de inicio (`LocalDate` o `LocalDateTime`) es anterior al momento actual.
+
+```java
+public class FechaInvalida extends Exception {
+    public FechaInvalida() {
+        super("Fecha no valida, es anterior a la actual");
+    }
+}
+```
+
+**Usada en:** constructores de `Membresia`, `Contrato`; constructor de `Reserva`.
+
+</Accordion>
+
+<Accordion title="CalificacionInvalida">
+
+**Mensaje:** `"La calificacion solo puede darse entre 1 y 5"`
+
+Lanzada cuando el valor de calificación está fuera del rango `[1, 5]`.
+
+```java
+public class CalificacionInvalida extends Exception {
+    public CalificacionInvalida() {
+        super("La calificacion solo puede darse entre 1 y 5");
+    }
+}
+```
+
+**Usada en:** `Reserva.calificarClase`, `AcademiaController.calificarReserva`.
+
+</Accordion>
+
+</AccordionGroup>
+
+---
+
+## Búsqueda y duplicados
+
+<AccordionGroup>
+
+<Accordion title="ElementoNoExistente">
+
+**Mensaje:** `"Elemento no encotrado"`
+
+Lanzada cuando se busca una entidad (usuario, estudiante, docente, grupo o reserva) y no se encuentra ninguna coincidencia.
+
+```java
+public class ElementoNoExistente extends Exception {
+    public ElementoNoExistente() {
+        super("Elemento no encotrado");
+    }
+}
+```
+
+**Usada en:** todos los métodos `buscarUn*` del controlador; `eliminarUsuario`, `eliminarEstudiante`, `eliminarDocente`, `eliminarGrupo`, `eliminarReserva`.
+
+</Accordion>
+
+<Accordion title="Duplicados">
+
+**Mensaje:** `"Datos ya existentes"`
+
+Lanzada al intentar crear una entidad cuyo número de documento o nombre de usuario ya existe en el sistema; también al intentar añadir un estudiante que ya está en un grupo.
+
+```java
+public class Duplicados extends Exception {
+    public Duplicados() {
+        super("Datos ya existentes");
+    }
+}
+```
+
+**Usada en:** `crearUsuario`, `crearEstudiante`, `crearDocente`, `Grupo.anadirEstudiante`.
+
+</Accordion>
+
+</AccordionGroup>
+
+---
+
+## Membresía
+
+<AccordionGroup>
+
+<Accordion title="EstadoMembresiaInvalido">
+
+**Mensaje:** `"El estado de la membresia no es valido"`
+
+Lanzada cuando se intenta asignar un estado de membresía `null` o incompatible con las reglas de transición.
+
+```java
+public class EstadoMembresiaInvalido extends Exception {
+    public EstadoMembresiaInvalido() {
+        super("El estado de la membresia no es valido");
+    }
+}
+```
+
+**Usada en:** `Membresia.actualizarEstadoMembresia`, `Estudiante.actualizarEstadoMembresia`.
+
+</Accordion>
+
+<Accordion title="TipoMembresiaInvalida">
+
+**Mensaje:** `"Tipo de membresia no valido"`
+
+Lanzada cuando `tipoMembresia` es `null` o se pasa `PERSONALIZADA` al constructor de membresía definida.
+
+```java
+public class TipoMembresiaInvalida extends Exception {
+    public TipoMembresiaInvalida() {
+        super("Tipo de membresia no valido");
+    }
+}
+```
+
+**Usada en:** constructor de `Membresia` (tipo definido), `AcademiaController.asignarMembresiaDefinida`.
+
+</Accordion>
+
+<Accordion title="EstudianteSinMembresia">
+
+**Mensaje:** `"Solo puedes entrar si tienes una membresía activa."`
+
+Lanzada cuando se requiere una membresía activa y el estudiante no tiene ninguna o la tiene cancelada.
+
+```java
+public class EstudianteSinMembresia extends Exception {
+    public EstudianteSinMembresia() {
+        super("Solo puedes entrar si tienes una membresía activa.");
+    }
+}
+```
+
+</Accordion>
+
+</AccordionGroup>
+
+---
+
+## Contrato
+
+<AccordionGroup>
+
+<Accordion title="EstadoContratoInvalido">
+
+**Mensaje:** `"Este estado de contrato no es valido"`
+
+Lanzada cuando se intenta asignar un estado de contrato `null`.
+
+```java
+public class EstadoContratoInvalido extends Exception {
+    public EstadoContratoInvalido() {
+        super("Este estado de contrato no es valido");
+    }
+}
+```
+
+**Usada en:** `Contrato.actualizarEstadoContrato`, `Docente.actualizarEstadoContrato`, `Docente.asignarContrato`.
+
+</Accordion>
+
+<Accordion title="EstadoContratoDoc">
+
+**Mensaje:** *(mensaje vacío — sin texto predefinido)*
+
+Lanzada al intentar asignar un contrato con `EstadoContrato.FINALIZADO` al docente mediante `setContrato`.
+
+```java
+public class EstadoContratoDoc extends Exception {
+    public EstadoContratoDoc() {
+        super();
+    }
+}
+```
+
+**Usada en:** `Docente.setContrato`.
+
+</Accordion>
+
+<Accordion title="DineroInsuficienteParaContratar">
+
+**Mensaje:** `"No hay suficiente capital para contratar"`
+
+Lanzada por el controlador cuando el capital de la academia es menor a `salarioBase * meses` antes de crear el contrato.
+
+```java
+public class DineroInsuficienteParaContratar extends Exception {
+    public DineroInsuficienteParaContratar() {
+        super("No hay suficiente capital para contratar");
+    }
+}
+```
+
+**Usada en:** `AcademiaController.asignarContrato`.
+
+</Accordion>
+
+</AccordionGroup>
+
+---
+
+## Grupos
+
+<AccordionGroup>
+
+<Accordion title="CantidadGruposExcedida">
+
+**Mensaje:** `"Solo puedes registrarte en maximo 4 grupos"`
+
+Lanzada al intentar añadir un estudiante a un grupo cuando ya pertenece a 4 grupos.
+
+```java
+public class CantidadGruposExcedida extends Exception {
+    public CantidadGruposExcedida() {
+        super("Solo puedes registrarte en maximo 4 grupos");
+    }
+}
+```
+
+**Usada en:** `Estudiante.addGrupo`, `Grupo.anadirEstudiante`.
+
+</Accordion>
+
+<Accordion title="EstudianteNoEnGrupo">
+
+**Mensaje:** `"El estudiante no pertence al grupo"`
+
+Lanzada al intentar eliminar un estudiante de un grupo en el que no está inscrito.
+
+```java
+public class EstudianteNoEnGrupo extends Exception {
+    public EstudianteNoEnGrupo() {
+        super("El estudiante no pertence al grupo");
+    }
+}
+```
+
+**Usada en:** `Grupo.eliminarEstudiante`.
+
+</Accordion>
+
+<Accordion title="DocenteNoEnGrupo">
+
+**Mensaje:** `"El docente no pertence a este grupo"`
+
+Lanzada al intentar eliminar un docente de un grupo al que no pertenece.
+
+```java
+public class DocenteNoEnGrupo extends Exception {
+    public DocenteNoEnGrupo() {
+        super("El docente no pertence a este grupo");
+    }
+}
+```
+
+**Usada en:** `Grupo.eliminarDocente`, `AcademiaController.eliminarDocente(TipoDocumento, String, String)`.
+
+</Accordion>
+
+<Accordion title="GrupoNoEncontrado">
+
+**Mensaje:** `"El grupo no fue encontrado"`
+
+Lanzada cuando un estudiante intenta abandonar un grupo que no aparece en su arreglo de grupos.
+
+```java
+public class GrupoNoEncontrado extends Exception {
+    public GrupoNoEncontrado() {
+        super("El grupo no fue encontrado");
+    }
+}
+```
+
+**Usada en:** `Estudiante.eliminarGrupo`.
+
+</Accordion>
+
+</AccordionGroup>
+
+---
+
+## Clases y reservas
+
+<AccordionGroup>
+
+<Accordion title="AforoIncompatible">
+
+**Mensaje:** `"Aforo incompatible: el máximo no puede ser menor al mínimo."`
+
+Lanzada al crear una `ClaseGrupal` cuando `aforoMaximo < aforoMinimo`.
+
+```java
+public class AforoIncompatible extends Exception {
+    public AforoIncompatible() {
+        super("Aforo incompatible: el máximo no puede ser menor al mínimo.");
+    }
+}
+```
+
+**Usada en:** `ClaseGrupal` (constructor), `AcademiaController.crearUnaReservaGrupal`.
+
+</Accordion>
+
+<Accordion title="NoSuficienteAforo">
+
+**Mensaje:** `"Aforo no alcanzado para iniciar"`
+
+Lanzada al intentar iniciar una clase grupal cuando el número de estudiantes inscritos es menor que `aforoMinimo`.
+
+```java
+public class NoSuficienteAforo extends Exception {
+    public NoSuficienteAforo() {
+        super("Aforo no alcanzado para iniciar");
+    }
+}
+```
+
+**Usada en:** `Reserva.iniciarClase`, `AcademiaController.inciarReserva`.
+
+</Accordion>
+
+<Accordion title="ClaseLlena">
+
+**Mensaje:** `"La reserva ya supero su aforo maximo"`
+
+Lanzada al intentar inscribir a un estudiante en una reserva cuyo `estadoReserva` ya es `LLENA`.
+
+```java
+public class ClaseLlena extends Exception {
+    public ClaseLlena() {
+        super("La reserva ya supero su aforo maximo");
+    }
+}
+```
+
+**Usada en:** `Reserva.reservarEstudiante`.
+
+</Accordion>
+
+<Accordion title="ClaseYaReservada">
+
+**Mensaje:** `"Ya tienes una reserva esperando"`
+
+Lanzada al intentar reservar una clase cuando el estudiante ya tiene `reservado == true`.
+
+```java
+public class ClaseYaReservada extends Exception {
+    public ClaseYaReservada() {
+        super("Ya tienes una reserva esperando");
+    }
+}
+```
+
+**Usada en:** `Estudiante.reservarClase`.
+
+</Accordion>
+
+<Accordion title="ClasesPrivadasNoSuficientes">
+
+**Mensaje:** `"No posses una cantidad de clases privadas suficientes"`
+
+Lanzada cuando el estudiante intenta reservar una clase personalizada pero `clasesPrivadasRestantes == 0`.
+
+```java
+public class ClasesPrivadasNoSuficientes extends Exception {
+    public ClasesPrivadasNoSuficientes() {
+        super("No posses una cantidad de clases privadas suficientes");
+    }
+}
+```
+
+**Usada en:** `Estudiante.actualizarPrivadasRestantes`.
+
+</Accordion>
+
+<Accordion title="ClaseEnEstadoNoIniciar">
+
+**Mensaje:** `"Aun no puedes empezar la clase - Debe ser entre 5min antes y no despues de 10min"`
+
+Lanzada cuando el docente intenta iniciar la clase con más de 5 minutos de anticipación respecto a `horaInicioEsperada`.
+
+```java
+public class ClaseEnEstadoNoIniciar extends Exception {
+    public ClaseEnEstadoNoIniciar() {
+        super("Aun no puedes empezar la clase - Debe ser entre 5min antes y no despues de 10min");
+    }
+}
+```
+
+**Usada en:** `Reserva.iniciarClase`.
+
+</Accordion>
+
+<Accordion title="ClaseEnEstadoNoCancelar">
+
+**Mensaje:** `"La clase no se puede canclear despues de que falten 30 min para que inicie."`
+
+Lanzada cuando el estudiante intenta cancelar su inscripción faltando menos de 30 minutos para el inicio de la reserva.
+
+```java
+public class ClaseEnEstadoNoCancelar extends Exception {
+    public ClaseEnEstadoNoCancelar() {
+        super("La clase no se puede canclear despues de que falten 30 min para que inicie. ");
+    }
+}
+```
+
+**Usada en:** `Reserva.cancelarReserva`.
+
+</Accordion>
+
+<Accordion title="ClaseEnEstadoNOCalificar">
+
+**Mensaje:** `"Aun no puedes calificar la clase"`
+
+Lanzada al intentar calificar una reserva cuyo `estadoReserva` no es `EXITOSA`, `PREMATURA` ni `TARDE`.
+
+```java
+public class ClaseEnEstadoNOCalificar extends Exception {
+    public ClaseEnEstadoNOCalificar() {
+        super("Aun no puedes calificar la clase");
+    }
+}
+```
+
+**Usada en:** `Reserva.calificarClase`.
+
+</Accordion>
+
+<Accordion title="ClaseEnEstadoNoUnirse">
+
+**Mensaje:** `"No te puedes unir a una clase que no ha iniciado"`
+
+Lanzada al intentar confirmar asistencia en una reserva cuyo `estadoReserva` no es `EN_CURSO`.
+
+```java
+public class ClaseEnEstadoNoUnirse extends Exception {
+    public ClaseEnEstadoNoUnirse() {
+        super("No te puedes unir a una clase que no ha iniciado");
+    }
+}
+```
+
+**Usada en:** `Reserva.unirseClase`.
+
+</Accordion>
+
+<Accordion title="ClaseNuncaIniciada">
+
+**Mensaje:** `"La clase no ha sido iniciada"`
+
+Lanzada al intentar finalizar una reserva cuyo `estadoReserva` no es `EN_CURSO` (nunca fue iniciada).
+
+```java
+public class ClaseNuncaIniciada extends Exception {
+    public ClaseNuncaIniciada() {
+        super("La clase no ha sido iniciada");
+    }
+}
+```
+
+**Usada en:** `Reserva.finalizarClase`.
+
+</Accordion>
+
+<Accordion title="ClaseNoEnEstudiante">
+
+**Mensaje:** `"La clase no pertenence a las clases de este estudiante"`
+
+Lanzada al intentar cancelar la inscripción de un estudiante en una clase que no aparece en su `historialClases`.
+
+```java
+public class ClaseNoEnEstudiante extends Exception {
+    public ClaseNoEnEstudiante() {
+        super("La clase no pertenence a las clases de este estudiante");
+    }
+}
+```
+
+**Usada en:** `Estudiante.cancelarReserva`.
+
+</Accordion>
+
+<Accordion title="FinalizacionPrematuraDeReserva">
+
+**Mensaje:** `"Finalizo la clase antes de tiempo"`
+
+Lanzada cuando `duracionReal < duracion - 25` (el docente finaliza la clase con más de 25 minutos de anticipación). El estado de la reserva pasa a `PREMATURA` antes de lanzarse.
+
+```java
+public class FinalizacionPrematuraDeReserva extends Exception {
+    public FinalizacionPrematuraDeReserva() {
+        super("Finalizo la clase antes de tiempo");
+    }
+}
+```
+
+**Usada en:** `Reserva.finalizarClase`, `AcademiaController.finalizarReserva`.
+
+</Accordion>
+
+<Accordion title="DocenteRetardado">
+
+**Mensaje:** `"Clase iniciada tarde"`
+
+Lanzada cuando el docente inicia la clase con más de 10 minutos de retraso. El estado de la reserva cambia a `TARDE` antes de lanzarse.
+
+```java
+public class DocenteRetardado extends Exception {
+    public DocenteRetardado() {
+        super("Clase iniciada tarde");
+    }
+}
+```
+
+**Usada en:** `Reserva.iniciarClase`, `AcademiaController.inciarReserva`.
+
+</Accordion>
+
+<Accordion title="EstudianteNoEnlistadoEnReserva">
+
+**Mensaje:** `"El estudiante no esta en la reserva o en sus asistentes"`
+
+Lanzada cuando se busca a un estudiante en `estudiantes[]` o `asistentes[]` de una reserva y no se encuentra.
+
+```java
+public class EstudianteNoEnlistadoEnReserva extends Exception {
+    public EstudianteNoEnlistadoEnReserva() {
+        super("El estudiante no esta en la reserva o en sus asistentes");
+    }
+}
+```
+
+**Usada en:** `Reserva.calificarClase`, `Reserva.unirseClase`, `Reserva.cancelarReserva`.
+
+</Accordion>
+
+<Accordion title="ReservaNoEncontradaEnGrupo">
+
+**Mensaje:** `"Reserva no esta en este grupo"`
+
+Lanzada al intentar eliminar una reserva de un grupo en el que dicha reserva no está registrada.
+
+```java
+public class ReservaNoEncontradaEnGrupo extends Exception {
+    public ReservaNoEncontradaEnGrupo() {
+        super("Reserva no esta en este grupo");
+    }
+}
+```
+
+**Usada en:** `Grupo.eliminarReserva`, `AcademiaController.eliminarReserva(String, String)`.
+
+</Accordion>
+
+<Accordion title="ReservaNoEnDocente">
+
+**Mensaje:** `"La reserva no esta asignada a este docente"`
+
+Lanzada al intentar desasignar una reserva de un docente cuando esa reserva no aparece en su `historialClasesImpartidas`.
+
+```java
+public class ReservaNoEnDocente extends Exception {
+    public ReservaNoEnDocente() {
+        super("La reserva no esta asignada a este docente");
+    }
+}
+```
+
+**Usada en:** `Docente.cancelarReservaDocente`, `Reserva.cancelarDocente`.
+
+</Accordion>
+
+<Accordion title="NingunDocenteAsignado">
+
+**Mensaje:** `"NO hay docente asignado a la reserva"`
+
+Lanzada al intentar cancelar el docente de una reserva cuando `docente == null`.
+
+```java
+public class NingunDocenteAsignado extends Exception {
+    public NingunDocenteAsignado() {
+        super("NO hay docente asignado a la reserva");
+    }
+}
+```
+
+**Usada en:** `Reserva.cancelarDocente`, `AcademiaController.cancelarDocente`.
+
+</Accordion>
+
+<Accordion title="ImposibleRetirar">
+
+**Mensaje:** `"No hay suficiente Capital"`
+
+Lanzada al intentar retirar capital cuando el monto solicitado supera el capital disponible.
+
+```java
+public class ImposibleRetirar extends Exception {
+    public ImposibleRetirar() {
+        super("No hay suficiente Capital");
+    }
+}
+```
+
+**Usada en:** `AcademiaController.retirarCapital`.
+
+</Accordion>
+
+</AccordionGroup>
+
+---
+
+## Tabla resumen
+
+| Excepción | Grupo | Mensaje clave |
+|---|---|---|
+| `ElementosVacios` | Validación | Campos vacíos no permitidos |
+| `NombreNoValido` | Validación | Nombre demasiado corto |
+| `CorreoNoValido` | Validación | Correo no institucional |
+| `LongitudNoValida` | Validación | Menos de 5 caracteres |
+| `ValoresNegativos` | Validación | Valor numérico negativo |
+| `FechaInvalida` | Validación | Fecha anterior a la actual |
+| `CalificacionInvalida` | Validación | Fuera del rango 1–5 |
+| `ElementoNoExistente` | Búsqueda | Entidad no encontrada |
+| `Duplicados` | Búsqueda | Documento o usuario ya existe |
+| `EstadoMembresiaInvalido` | Membresía | Estado de membresía inválido |
+| `TipoMembresiaInvalida` | Membresía | Tipo de membresía inválido |
+| `EstudianteSinMembresia` | Membresía | Sin membresía activa |
+| `EstadoContratoInvalido` | Contrato | Estado de contrato inválido |
+| `EstadoContratoDoc` | Contrato | Contrato finalizado en docente |
+| `DineroInsuficienteParaContratar` | Contrato | Capital insuficiente |
+| `CantidadGruposExcedida` | Grupos | Límite de 4 grupos superado |
+| `EstudianteNoEnGrupo` | Grupos | Estudiante no pertenece al grupo |
+| `DocenteNoEnGrupo` | Grupos | Docente no pertenece al grupo |
+| `GrupoNoEncontrado` | Grupos | Grupo no encontrado en estudiante |
+| `AforoIncompatible` | Clases/Reservas | Máximo menor que mínimo |
+| `NoSuficienteAforo` | Clases/Reservas | Inscritos < aforoMínimo |
+| `ClaseLlena` | Clases/Reservas | Aforo máximo alcanzado |
+| `ClaseYaReservada` | Clases/Reservas | El estudiante ya tiene reserva activa |
+| `ClasesPrivadasNoSuficientes` | Clases/Reservas | Sin créditos de clases privadas |
+| `ClaseEnEstadoNoIniciar` | Clases/Reservas | Fuera de la ventana de inicio |
+| `ClaseEnEstadoNoCancelar` | Clases/Reservas | Menos de 30 min para el inicio |
+| `ClaseEnEstadoNOCalificar` | Clases/Reservas | Reserva no finalizada |
+| `ClaseEnEstadoNoUnirse` | Clases/Reservas | Reserva no en curso |
+| `ClaseNuncaIniciada` | Clases/Reservas | Reserva no iniciada |
+| `ClaseNoEnEstudiante` | Clases/Reservas | Clase no en historial del estudiante |
+| `FinalizacionPrematuraDeReserva` | Clases/Reservas | Finalizada > 25 min antes |
+| `DocenteRetardado` | Clases/Reservas | Inicio con > 10 min de retraso |
+| `EstudianteNoEnlistadoEnReserva` | Clases/Reservas | Estudiante no en reserva |
+| `ReservaNoEncontradaEnGrupo` | Clases/Reservas | Reserva no en el grupo |
+| `ReservaNoEnDocente` | Clases/Reservas | Reserva no asignada al docente |
+| `NingunDocenteAsignado` | Clases/Reservas | Docente `null` en la reserva |
+| `ImposibleRetirar` | Capital | Capital insuficiente para retirar |

@@ -1,0 +1,261 @@
+---
+title: 'Arquitectura'
+description: 'Visión general de la arquitectura MVC de NOUS ACADEMY: capas, paquetes, flujo de datos y proceso de arranque.'
+---
+
+NOUS ACADEMY es una aplicación de escritorio Java Swing organizada siguiendo el patrón **Modelo–Vista–Controlador (MVC)**. Esta página describe las tres capas, la estructura de paquetes, el proceso de arranque y las relaciones entre las entidades principales.
+
+## Patrón MVC
+
+<CardGroup cols={3}>
+  <Card title="Modelo" icon="database">
+    Entidades de negocio (`Usuario`, `Estudiante`, `Docente`, `Reserva`, `Grupo`) y lógica contable (`Membresia`, `Contrato`). Implementan `Serializable` para persistencia directa en disco.
+  </Card>
+  <Card title="Vista" icon="monitor">
+    Ventanas Swing (`LoginFrame`, `AdminFrame`, `StudentFrame`, `TeacherFrame`) y utilidades de UI (`Theme`, `UiDialogs`, `ArrayTableModel`). Solo leen y presentan datos; no contienen lógica de negocio.
+  </Card>
+  <Card title="Controlador" icon="settings">
+    `AcademiaController` es el único punto de entrada para toda operación de negocio. Gestiona los arrays en memoria, ejecuta validaciones y escribe la persistencia en `datos/`.
+  </Card>
+</CardGroup>
+
+## Estructura de paquetes
+
+```
+com.nousacademy/
+├── boot/               # Arranque: lectura de ficheros y bootstrap del admin
+│   ├── BootClass.java
+│   └── BootDeUsarioAdmin.java
+├── controller/         # Capa controlador
+│   └── AcademiaController.java
+├── modelo/             # Entidades de dominio (clases, reservas, grupos)
+│   ├── Clase.java
+│   ├── ClaseGrupal.java
+│   ├── ClasePersonalizada.java
+│   ├── EstadoReserva.java
+│   ├── EstadoDocente.java
+│   ├── Grupo.java
+│   └── Reserva.java
+├── usuarios/           # Jerarquía de usuarios
+│   ├── Usuario.java
+│   ├── Estudiante.java
+│   ├── Docente.java
+│   ├── TipoDocumento.java
+│   └── TipoUsuario.java
+├── contabilidad/       # Lógica financiera y contratos
+│   ├── Membresia.java
+│   ├── Contrato.java
+│   ├── TipoMembresia.java
+│   ├── EstadoMembresia.java
+│   ├── EstadoContrato.java
+│   └── ComportamientoContable.java
+├── excepciones/        # Excepciones de dominio personalizadas
+└── interfacegrafica/   # Capa vista (Swing)
+    ├── NousSwingApp.java
+    ├── ControllerProvider.java
+    ├── LoginFrame.java
+    ├── AdminFrame.java
+    ├── StudentFrame.java
+    ├── TeacherFrame.java
+    ├── Theme.java
+    ├── UiDialogs.java
+    ├── ArrayTableModel.java
+    ├── TableRenderers.java
+    ├── DatePicker.java
+    ├── Parsers.java
+    └── ExceptionText.java
+```
+
+<AccordionGroup>
+  <Accordion title="boot — arranque y bootstrapping">
+    `BootClass` lee `datos/NousAcademy.txt` en su inicializador de instancia para construir el `AcademiaController` con los datos de la empresa. Luego expone métodos `cargar*()` que deserializan los archivos de persistencia por tipo de extensión.
+
+    `BootDeUsarioAdmin` es un `main` independiente para crear el primer administrador cuando la base de datos está vacía.
+  </Accordion>
+
+  <Accordion title="controller — punto de entrada único">
+    `AcademiaController` concentra toda la lógica de negocio: validaciones, transformaciones, persistencia y cálculos financieros. La UI nunca manipula las entidades directamente; siempre invoca un método del controlador.
+  </Accordion>
+
+  <Accordion title="modelo — entidades de dominio">
+    `Clase` es la clase base abstracta de la que heredan `ClaseGrupal` (con aforo mínimo y máximo) y `ClasePersonalizada` (con información adicional para sesiones privadas). `Reserva` agrega una `Clase`, un array de `Estudiante[]` inscritos, un `Docente` asignado y el estado de la sesión (`EstadoReserva`). `Grupo` contiene sus propios arrays de `Estudiante[]`, `Docente[]` y `Reserva[]`.
+  </Accordion>
+
+  <Accordion title="usuarios — jerarquía de personas">
+    `Usuario` es la clase base (administrador). `Estudiante` extiende `Usuario` y añade `Membresia` y un array de grupos. `Docente` extiende `Usuario` y añade `Contrato`, `especialidad` y un array de reservas asignadas. Todas implementan `Serializable` con `serialVersionUID` fijos.
+  </Accordion>
+
+  <Accordion title="contabilidad — finanzas">
+    `ComportamientoContable` es una interfaz con el método `impactoComercial()`, implementado por `Membresia` y `Contrato`. Cuando se asigna una membresía o un contrato, el controlador suma o resta el impacto al capital de la academia y lo persiste en `NousAcademy.txt`.
+  </Accordion>
+
+  <Accordion title="excepciones — dominio tipado">
+    Cada regla de negocio tiene su propia excepción verificada: `Duplicados`, `ClaseLlena`, `AforoIncompatible`, `EstadoMembresiaInvalido`, `DineroInsuficienteParaContratar`, entre otras. Esto garantiza que la vista siempre recibe errores con semántica de negocio, no solo mensajes genéricos.
+  </Accordion>
+
+  <Accordion title="interfacegrafica — vistas Swing">
+    Cada rol tiene su ventana principal: `AdminFrame` (gestión completa), `StudentFrame` (grupos, reservas, calificaciones) y `TeacherFrame` (iniciar y finalizar clases asignadas). `Theme` centraliza colores, fuentes y bordes. `UiDialogs` provee diálogos de error e información reutilizables.
+  </Accordion>
+</AccordionGroup>
+
+## Flujo de datos: UI → Controlador → Modelo → Persistencia
+
+Toda interacción del usuario sigue el mismo camino de cuatro pasos:
+
+<Steps>
+  <Step title="La vista captura la entrada">
+    Los formularios Swing recogen los valores del usuario. `Parsers` y `DatePicker` convierten los `String` de los campos de texto a los tipos Java necesarios (`LocalDate`, `TipoDocumento`, etc.).
+  </Step>
+
+  <Step title="La vista invoca el controlador">
+    El método del controlador correspondiente es llamado con los parámetros ya tipados. Por ejemplo, al crear un estudiante:
+
+    ```java
+    // Llamada desde AdminFrame
+    controller.crearEstudiante(
+        nombre, apellidos, telefono, correo,
+        tipoDocumento, numeroDocumento,
+        usuario, contrasena
+    );
+    ```
+  </Step>
+
+  <Step title="El controlador ejecuta la lógica de negocio">
+    `AcademiaController` valida duplicados, aplica reglas de negocio y construye la entidad. Si la validación pasa, añade el objeto al array en memoria y llama al método de serialización de la entidad:
+
+    ```java
+    // AcademiaController.java — crearEstudiante
+    Estudiante e = new Estudiante(
+        nombre, apellidos, telefono, correo,
+        tipoDocumento, numeroDocumento, usuario, contrasena
+    );
+    this.estudiantes = Arrays.copyOf(
+        this.estudiantes, this.estudiantes.length + 1
+    );
+    this.estudiantes[this.estudiantes.length - 1] = e;
+    e.copiarFicheroUsuario(
+        base + e.getTipoDocumento().name().substring(0, 2)
+        + e.getNumeroDocumento() + ".est"
+    );
+    ```
+  </Step>
+
+  <Step title="La entidad se serializa en datos/">
+    `copiarFicheroUsuario` (o su equivalente en `Grupo` y `Reserva`) abre un `FileOutputStream` y escribe el objeto completo con `ObjectOutputStream`. El nombre del archivo sigue la convención `[prefijo-tipo-doc][numero-doc].[ext]`:
+
+    ```java
+    // Usuario.java
+    public void copiarFicheroUsuario(String dir) throws IOException {
+        FileOutputStream f = new FileOutputStream(dir);
+        ObjectOutputStream b = new ObjectOutputStream(f);
+        b.writeObject((Usuario) this);
+        b.close();
+        f.close();
+    }
+    ```
+
+    | Tipo de entidad | Extensión | Ejemplo de nombre |
+    |-----------------|-----------|-------------------|
+    | `Usuario` (admin) | `.usr` | `CC1034992245.usr` |
+    | `Estudiante` | `.est` | `CC1099887766.est` |
+    | `Docente` | `.doce` | `CC5556667778.doce` |
+    | `Reserva` | `.res` | `RES001.res` |
+    | `Grupo` | `.grp` | `GRUP001.grp` |
+  </Step>
+</Steps>
+
+## El proceso de arranque
+
+Al iniciar la aplicación, `ControllerProvider.cargarDesdeBootClass()` orquesta la carga completa antes de que aparezca la primera ventana:
+
+```java
+// ControllerProvider.java
+public static AcademiaController cargarDesdeBootClass() {
+    BootClass boot = new BootClass(); // Lee NousAcademy.txt y crea el controller
+    boot.cargarUsuarios();            // *.usr  → setUsuarios()
+    boot.cargarEstudiantes();         // *.est  → setEstudiantes()
+    boot.cargarDocentes();            // *.doce → setDocentes()
+    boot.cargarReservas();            // *.res  → setReservas()
+    boot.cargarGrupos();              // *.grp  → setGrupos()
+    return boot.getNousAcademy();
+}
+```
+
+Cada método `cargar*()` en `BootClass` sigue el mismo patrón: filtra los archivos de `datos/` por extensión, deserializa cada uno con `ObjectInputStream` y acumula los objetos en un array que luego inyecta en el controlador:
+
+```java
+// BootClass.java — cargarEstudiantes (patrón representativo)
+public void cargarEstudiantes() {
+    Estudiante[] e = new Estudiante[0];
+    String extension = ".est";
+    for (File i : archivos) {
+        if (i.isFile() && i.getName().endsWith(extension)) {
+            try {
+                f = new FileInputStream(i);
+                r = new ObjectInputStream(f);
+                Object obj = r.readObject();
+                if (obj instanceof Estudiante) {
+                    e = Arrays.copyOf(e, e.length + 1);
+                    e[e.length - 1] = (Estudiante) obj;
+                }
+            } catch (ClassNotFoundException | IOException ex) {
+                System.out.println("ERROR EN BOOTEO");
+            } finally {
+                // cierra streams
+            }
+        }
+    }
+    nousAcademy.setEstudiantes(e);
+}
+```
+
+<Note>
+  `BootClass` llama a `cargarEmpresa()` en su bloque de inicialización de instancia (campo `datosEmpresa`), antes de que cualquier método `cargar*()` sea invocado. Esto significa que `AcademiaController` ya está construido con los datos de la empresa cuando `ControllerProvider` empieza a llamar a los métodos de carga.
+</Note>
+
+## Relaciones entre entidades
+
+`AcademiaController` es la raíz del grafo de objetos en memoria. Mantiene cinco arrays planos que representan las colecciones de primer nivel del sistema:
+
+```java
+// AcademiaController.java — estado en memoria
+private Usuario[]    usuarios;    // Administradores
+private Estudiante[] estudiantes;
+private Docente[]    docentes;
+private Reserva[]    reservas;
+private Grupo[]      grupos;
+```
+
+Las relaciones entre entidades son **bidireccionales** en varios casos: cuando un `Estudiante` entra a un `Grupo`, tanto el array de estudiantes del grupo como el array de grupos del estudiante son actualizados. Lo mismo ocurre al asignar una `Reserva` a un `Grupo` o al asignar un `Docente` a una `Reserva`.
+
+```
+AcademiaController
+├── Usuario[]       (administradores)
+├── Estudiante[]
+│   ├── Membresia
+│   └── Grupo[]     (referencias a grupos donde está inscrito)
+├── Docente[]
+│   ├── Contrato
+│   └── Reserva[]   (referencias a reservas asignadas)
+├── Reserva[]
+│   ├── Clase       (ClaseGrupal | ClasePersonalizada)
+│   ├── Docente     (asignado)
+│   ├── Estudiante[] (inscritos)
+│   └── Estudiante[] (asistentes reales)
+└── Grupo[]
+    ├── Estudiante[]
+    ├── Docente[]
+    └── Reserva[]
+```
+
+<Warning>
+  Los arrays usan `Arrays.copyOf` para crecer dinámicamente (sin `ArrayList`). La eliminación de un elemento intercambia la posición con el último elemento del array y reduce el tamaño en uno, por lo que el **orden de los elementos no está garantizado** tras una eliminación.
+</Warning>
+
+## Roles y acceso por tipo de usuario
+
+| Rol | Clase Java | Vista asignada | Capacidades principales |
+|-----|-----------|----------------|------------------------|
+| Administrador | `Usuario` (`TipoUsuario.ADMINISTRADOR`) | `AdminFrame` | CRUD completo de todas las entidades, capital, membresías, contratos |
+| Estudiante | `Estudiante` | `StudentFrame` | Entrar/salir grupos, reservar/cancelar clases, calificar sesiones |
+| Docente | `Docente` | `TeacherFrame` | Iniciar y finalizar reservas asignadas |

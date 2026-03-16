@@ -1,0 +1,243 @@
+---
+title: Administradores
+description: Documentación del tipo de usuario Administrador en NOUS ACADEMY — campos, reglas de validación, métodos del controlador y persistencia en disco.
+---
+
+El **Administrador** es el tipo de usuario base del sistema. Se representa con la clase `Usuario` y tiene asignado el rol `TipoUsuario.ADMINISTRADOR`. Desde este perfil se gestionan los demás usuarios, los grupos, las reservas y los contratos de la academia.
+
+## Campos del usuario
+
+<ResponseField name="nombre" type="String" required>
+  Nombre del administrador. Mínimo 2 caracteres.
+</ResponseField>
+
+<ResponseField name="apellidos" type="String" required>
+  Apellidos del administrador. Mínimo 2 caracteres.
+</ResponseField>
+
+<ResponseField name="telefono" type="String" required>
+  Número de teléfono. Debe ser positivo y tener al menos 5 dígitos.
+</ResponseField>
+
+<ResponseField name="correo" type="String" required>
+  Dirección de correo electrónico. Debe contener `@` y terminar en `nousacademy.co`.
+</ResponseField>
+
+<ResponseField name="tipoDocumento" type="TipoDocumento" required>
+  Tipo de documento de identidad. Valores válidos: `CC`, `TARJETA_IDENTIDAD`, `CE`, `PASAPORTE`, `NIT`.
+</ResponseField>
+
+<ResponseField name="numeroDocumento" type="String" required>
+  Número del documento de identidad. Debe ser positivo y tener al menos 5 dígitos.
+</ResponseField>
+
+<ResponseField name="usuario" type="String" required>
+  Nombre de usuario para inicio de sesión. No puede estar vacío ni estar duplicado en el sistema.
+</ResponseField>
+
+<ResponseField name="contrasena" type="String" required>
+  Contraseña de acceso. No puede estar vacía.
+</ResponseField>
+
+<ResponseField name="tipoUsuario" type="TipoUsuario">
+  Rol asignado automáticamente. Siempre es `TipoUsuario.ADMINISTRADOR` al crear con el constructor de `Usuario`.
+</ResponseField>
+
+## Tipos de documento
+
+El enum `TipoDocumento` define los documentos aceptados:
+
+```java
+// com/nousacademy/usuarios/TipoDocumento.java
+public enum TipoDocumento {
+    CC,
+    TARJETA_IDENTIDAD,
+    CE,
+    PASAPORTE,
+    NIT
+}
+```
+
+<Columns cols={3}>
+  <Card title="CC" icon="id-card">
+    Cédula de ciudadanía.
+  </Card>
+  <Card title="TARJETA_IDENTIDAD" icon="address-card">
+    Tarjeta de identidad.
+  </Card>
+  <Card title="CE" icon="passport">
+    Cédula de extranjería.
+  </Card>
+  <Card title="PASAPORTE" icon="book">
+    Pasaporte.
+  </Card>
+  <Card title="NIT" icon="building">
+    Número de identificación tributaria.
+  </Card>
+</Columns>
+
+## Reglas de validación
+
+El constructor de `Usuario` aplica las siguientes validaciones antes de asignar cualquier campo:
+
+```java
+// com/nousacademy/usuarios/Usuario.java — constructor
+public Usuario(String nombre, String apellidos, String telefono, String correo,
+               TipoDocumento tipoDocumento, String numeroDocumento,
+               String usuario, String contrasena)
+    throws ElementosVacios, NombreNoValido, CorreoNoValido, ValoresNegativos, LongitudNoValida {
+
+    if (nombre.isEmpty() || apellidos.isEmpty() || telefono.isEmpty() ||
+            correo.isEmpty() || numeroDocumento.isEmpty() || usuario.isEmpty() || contrasena.isEmpty()) {
+        throw new ElementosVacios();
+    }
+    if (nombre.length() < 2 || apellidos.length() < 2) {
+        throw new NombreNoValido();
+    }
+    if (!correo.contains("@") || !correo.endsWith("nousacademy.co")) {
+        throw new CorreoNoValido();
+    }
+    if (Float.parseFloat(telefono) < 0 || Float.parseFloat(numeroDocumento) < 0) {
+        throw new ValoresNegativos();
+    }
+    if (telefono.length() < 5 || numeroDocumento.length() < 5) {
+        throw new LongitudNoValida();
+    }
+    // ... asignación de campos
+    this.tipoUsuario = TipoUsuario.ADMINISTRADOR;
+}
+```
+
+<AccordionGroup>
+  <Accordion title="ElementosVacios">
+    Se lanza cuando cualquiera de los campos obligatorios es una cadena vacía.
+  </Accordion>
+  <Accordion title="NombreNoValido">
+    Se lanza cuando `nombre` o `apellidos` tienen menos de 2 caracteres.
+  </Accordion>
+  <Accordion title="CorreoNoValido">
+    Se lanza cuando el correo no contiene `@` o no termina en `nousacademy.co`.
+  </Accordion>
+  <Accordion title="ValoresNegativos">
+    Se lanza cuando `telefono` o `numeroDocumento` representan un número negativo.
+  </Accordion>
+  <Accordion title="LongitudNoValida">
+    Se lanza cuando `telefono` o `numeroDocumento` tienen menos de 5 caracteres.
+  </Accordion>
+</AccordionGroup>
+
+<Warning>
+  El correo debe terminar exactamente en `nousacademy.co`. Dominios como `@nousacademy.com` o `@mail.nousacademy.co` son rechazados.
+</Warning>
+
+## Métodos del controlador
+
+Todos los métodos de gestión de administradores se encuentran en `AcademiaController`.
+
+### Crear un administrador
+
+```java
+// com/nousacademy/controller/AcademiaController.java — línea 298
+public void crearUsuario(
+    String nombre, String apellidos, String telefono,
+    String correo, TipoDocumento tipoDocumento, String numeroDocumento,
+    String usuario, String contrasena)
+    throws ElementosVacios, CorreoNoValido, NombreNoValido,
+           IOException, ValoresNegativos, LongitudNoValida, Duplicados
+```
+
+<Steps>
+  <Step title="Verificar duplicados">
+    El controlador recorre el arreglo `usuarios[]` y comprueba que no exista otro registro con el mismo tipo y número de documento, ni con el mismo nombre de usuario. Si existe, lanza `Duplicados`.
+  </Step>
+  <Step title="Instanciar Usuario">
+    Crea un objeto `new Usuario(...)` aplicando todas las validaciones del constructor.
+  </Step>
+  <Step title="Agregar al arreglo">
+    El objeto se añade al final del arreglo `usuarios[]` usando `Arrays.copyOf`.
+  </Step>
+  <Step title="Persistir en disco">
+    Llama a `copiarFicheroUsuario()` con la ruta `datos/<TD_2chars><numeroDocumento>.usr`.
+  </Step>
+</Steps>
+
+### Eliminar un administrador
+
+```java
+// com/nousacademy/controller/AcademiaController.java — línea 323
+public void eliminarUsuario(TipoDocumento tipoDocumento, String numeroDocumento)
+    throws ElementoNoExistente
+```
+
+Localiza al usuario por `tipoDocumento` + `numeroDocumento`. Si no existe, lanza `ElementoNoExistente`. Elimina el fichero `.usr` del directorio `datos/` y compacta el arreglo.
+
+### Actualizar un administrador
+
+```java
+// com/nousacademy/controller/AcademiaController.java — línea 341
+public void actualizarUsuario(
+    TipoDocumento originalTD, String originalND,
+    String nombre, String apellidos, String telefono,
+    String correo, TipoDocumento tipoDocumento, String numeroDocumento)
+    throws CorreoNoValido, NombreNoValido, ElementoNoExistente, IOException, ValoresNegativos
+```
+
+Solo actualiza los campos cuyo valor no sea una cadena vacía (o `null` para `tipoDocumento`). Tras la actualización, elimina el fichero `.usr` anterior y escribe uno nuevo con los identificadores actualizados.
+
+<Tip>
+  Pasa una cadena vacía `""` en los parámetros que no deseas modificar. El controlador omitirá esos campos automáticamente.
+</Tip>
+
+### Leer todos los administradores
+
+```java
+// com/nousacademy/controller/AcademiaController.java — línea 378
+public Usuario[] leerUsuarios()
+```
+
+Devuelve una copia defensiva (`clone()`) del arreglo interno `usuarios[]`.
+
+### Buscar un administrador
+
+```java
+// com/nousacademy/controller/AcademiaController.java — línea 276
+public Usuario buscarUnUsuario(TipoDocumento tipoDocumento, String numeroDocumento)
+    throws ElementoNoExistente
+```
+
+Localiza y devuelve el objeto `Usuario` que coincida con el tipo y número de documento. Lanza `ElementoNoExistente` si no se encuentra.
+
+## Persistencia en disco
+
+Cada administrador se serializa como un fichero binario en el directorio `datos/`.
+
+```java
+// com/nousacademy/usuarios/Usuario.java — línea 159
+public void copiarFicheroUsuario(String dir) throws IOException {
+    FileOutputStream f = new FileOutputStream(dir);
+    ObjectOutputStream b = new ObjectOutputStream(f);
+    b.writeObject((Usuario) this);
+    b.close();
+    f.close();
+}
+```
+
+**Convención de nombre de fichero:**
+
+```
+datos/<primeras2letrasDelTipoDocumento><numeroDocumento>.usr
+```
+
+**Ejemplos:**
+
+| `tipoDocumento`     | `numeroDocumento` | Nombre del fichero        |
+| ------------------- | ----------------- | ------------------------- |
+| `CC`                | `10234567`        | `datos/CC10234567.usr`    |
+| `TARJETA_IDENTIDAD` | `98765`           | `datos/TA98765.usr`       |
+| `PASAPORTE`         | `AB12345`         | `datos/PA AB12345.usr`    |
+
+<Note>
+  El prefijo del fichero se forma con los primeros 2 caracteres del nombre del enum: `CC` → `CC`, `TARJETA_IDENTIDAD` → `TA`, `CE` → `CE`, `PASAPORTE` → `PA`, `NIT` → `NI`.
+</Note>
+
+La clase implementa `java.io.Serializable` con `serialVersionUID = 20012008L`.

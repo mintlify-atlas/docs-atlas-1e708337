@@ -1,0 +1,153 @@
+---
+title: 'Clases personalizadas'
+description: 'Documentación de ClasePersonalizada: clase 1 a 1 creada por el estudiante, créditos de clases privadas y persistencia.'
+---
+
+Una clase personalizada (`ClasePersonalizada`) es una sesión individual entre un estudiante y un docente. A diferencia de las clases grupales, las crea **el propio estudiante logueado** y consume un crédito de clases privadas de su membresía.
+
+## Campo adicional
+
+Además de los campos heredados de `Clase`, `ClasePersonalizada` añade:
+
+| Campo                | Tipo     | Descripción                                                         |
+|----------------------|----------|---------------------------------------------------------------------|
+| `informacionAdjunta` | `String` | Notas adicionales sobre la clase (puede estar vacío).               |
+
+```java
+// ClasePersonalizada.java
+public class ClasePersonalizada extends Clase implements Serializable {
+
+    private String informacionAdjunta;
+
+    public ClasePersonalizada(String titulo, String descripcion, String tema,
+                              float duracion, String informacionAdjunta)
+            throws ElementosVacios {
+        super(titulo, descripcion, tema, duracion, "PV");
+        this.informacionAdjunta = informacionAdjunta; // Puede estar vacía
+    }
+}
+```
+
+<Note>
+  `informacionAdjunta` es el único campo que puede recibirse vacío. Todos los demás campos del constructor base (`titulo`, `descripcion`, `tema`, `duracion`) deben estar presentes o se lanza `ElementosVacios`.
+</Note>
+
+## Creación desde el controlador
+
+El estudiante logueado invoca `crearUnaReservaPersonalizada()` pasándose a sí mismo como parámetro:
+
+```java
+// AcademiaController.java
+public void crearUnaReservaPersonalizada(
+        Estudiante estudiante,
+        LocalDateTime horaInicioEsperada,
+        String titulo,
+        String descripcion,
+        String tema,
+        float duracion,
+        String info)
+        throws ElementosVacios, ClasesPrivadasNoSuficientes, ClaseYaReservada,
+               ClaseLlena, IOException, FechaInvalida, ValoresNegativos {
+
+    Reserva r = new Reserva(
+            horaInicioEsperada, titulo, descripcion, tema, duracion, info);
+    r.reservarEstudiante(estudiante); // descuenta un crédito privado
+    this.reservas = Arrays.copyOf(this.reservas, this.reservas.length + 1);
+    this.reservas[this.reservas.length - 1] = r;
+    r.copiarFicheroReserva(base + r.getCodigo() + ".res");
+}
+```
+
+<Steps>
+  <Step title="Validar la fecha">
+    Se comprueba que `horaInicioEsperada` sea futura. Si no lo es, se lanza `FechaInvalida`.
+  </Step>
+  <Step title="Crear la reserva">
+    Se instancia `Reserva` con el constructor de clase personalizada, que crea internamente un objeto `ClasePersonalizada` con sufijo `PV`.
+  </Step>
+  <Step title="Inscribir al estudiante">
+    Se llama a `reservarEstudiante(estudiante)`. Esto delega en `estudiante.reservarClase(clase)`, que verifica y descuenta el crédito de clases privadas (`clasesPrivadasRestantes`).
+  </Step>
+  <Step title="Marcar como LLENA">
+    Al inscribirse el estudiante, la reserva pasa inmediatamente al estado `LLENA` porque es una clase 1 a 1.
+  </Step>
+  <Step title="Persistir">
+    La reserva se serializa en `datos/<código>.res`.
+  </Step>
+</Steps>
+
+## Créditos de clases privadas
+
+<Warning>
+  Si el estudiante no tiene créditos de clases privadas disponibles (`clasesPrivadasRestantes == 0`), se lanza `ClasesPrivadasNoSuficientes` y la reserva no se crea.
+</Warning>
+
+El descuento ocurre dentro de `Estudiante.reservarClase(Clase clase)`, que es llamado por `Reserva.reservarEstudiante()`:
+
+```java
+// Reserva.java — reservarEstudiante
+public void reservarEstudiante(Estudiante estudiante)
+        throws ClasesPrivadasNoSuficientes, ClaseYaReservada, ClaseLlena {
+
+    if (this.estadoReserva == EstadoReserva.LLENA) {
+        throw new ClaseLlena();
+    }
+    estudiante.reservarClase(this.clase); // lanza ClasesPrivadasNoSuficientes si no hay créditos
+    this.estudiantes = Arrays.copyOf(
+            this.estudiantes, this.estudiantes.length + 1);
+    this.estudiantes[this.estudiantes.length - 1] = estudiante;
+
+    if (this.clase instanceof ClasePersonalizada) {
+        this.estadoReserva = EstadoReserva.LLENA; // 1 a 1: se llena al instante
+    }
+}
+```
+
+### Devolución del crédito al cancelar
+
+Si el estudiante cancela su reserva personalizada con más de 30 minutos de antelación, se restaura el crédito consumido mediante `estudiante.cancelarReserva(clase)` y la reserva pasa a estado `CANCELADA`:
+
+```java
+// Reserva.java — cancelarReserva
+if (this.clase instanceof ClasePersonalizada) {
+    this.estadoReserva = EstadoReserva.CANCELADA;
+}
+estudiante.cancelarReserva(this.getClase()); // devuelve el crédito privado
+```
+
+## Estado inmediato LLENA
+
+A diferencia de la clase grupal, donde `LLENA` se alcanza cuando `estudiantes.length == aforoMaximo`, en la clase personalizada el estado pasa a `LLENA` **en el mismo momento en que el estudiante se inscribe**, ya que solo admite un participante.
+
+```java
+} else if (this.clase instanceof ClasePersonalizada) {
+    this.estadoReserva = EstadoReserva.LLENA;
+}
+```
+
+## Generación del código
+
+```java
+// ClasePersonalizada.java
+private static int contador = 1;
+
+@Override
+public String generarCodigo(String sufijo) {
+    String codigoGenerado = sufijo + "-" + String.format("%03d", contador);
+    contador++;
+    return codigoGenerado;
+}
+```
+
+Las clases personalizadas reciben códigos del tipo `PV-001`, `PV-002`, etc. El contador es independiente del de `ClaseGrupal`.
+
+## Persistencia
+
+Al igual que las clases grupales, la reserva se serializa en un fichero `.res`:
+
+```
+datos/PV-001.res
+datos/PV-002.res
+```
+
+Cada operación que modifica el estado de la reserva o del estudiante actualiza tanto el fichero `.res` como el fichero `.est` del estudiante.

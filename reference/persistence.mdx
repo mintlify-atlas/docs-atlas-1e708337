@@ -1,0 +1,202 @@
+---
+title: 'Persistencia'
+description: 'Sistema de persistencia basado en serialización Java. Convenciones de nombres de archivo, estructura del directorio datos/ y secuencia de arranque de BootClass.'
+---
+
+NOUS ACADEMY utiliza serialización binaria de Java (`ObjectOutputStream` / `ObjectInputStream`) como mecanismo principal de persistencia. Cada entidad implementa `Serializable` y define un `serialVersionUID` fijo para garantizar la compatibilidad entre sesiones.
+
+<Note>
+  Toda operación de escritura (crear, actualizar, eliminar) persiste el estado en disco **de forma inmediata**, sin caché ni transacciones intermedias.
+</Note>
+
+---
+
+## Mecanismo de serialización
+
+### Escritura
+
+Cada entidad expone un método de persistencia propio que escribe el objeto completo en un archivo binario:
+
+```java
+// Ejemplo: Usuario.copiarFicheroUsuario(String dir)
+public void copiarFicheroUsuario(String dir) throws IOException {
+    FileOutputStream f = new FileOutputStream(dir);
+    ObjectOutputStream b = new ObjectOutputStream(f);
+    b.writeObject((Usuario) this);
+    b.close();
+    f.close();
+}
+```
+
+El patrón es idéntico para todas las demás entidades:
+
+| Entidad | Método de escritura |
+|---|---|
+| `Usuario` | `copiarFicheroUsuario(String dir)` |
+| `Estudiante` | `copiarFicheroUsuario(String dir)` (hereda de `Usuario`) |
+| `Docente` | `copiarFicheroUsuario(String dir)` (hereda de `Usuario`) |
+| `Grupo` | `copiarFicheroGrupo(String dir)` |
+| `Reserva` | `copiarFicheroReserva(String dir)` |
+| `Membresia` | `copiarFicheroMembresia(String dir)` |
+| `Contrato` | `copiarFicheroContrato(String dir)` |
+
+### Lectura
+
+`BootClass` lee todos los archivos del directorio `datos/` al iniciar la aplicación, filtrando por extensión:
+
+```java
+// Ejemplo: carga de estudiantes
+FileInputStream f = new FileInputStream(archivo);
+ObjectInputStream r = new ObjectInputStream(f);
+Object obj = r.readObject();
+if (obj instanceof Estudiante) {
+    e = Arrays.copyOf(e, e.length + 1);
+    e[e.length - 1] = (Estudiante) obj;
+}
+```
+
+---
+
+## Convenciones de nombres de archivo
+
+La ruta base es siempre `datos/` (relativa al directorio de trabajo de la aplicación).
+
+| Entidad | Patrón de nombre | Ejemplo |
+|---|---|---|
+| Administrador | `{prefijo_TipoDocumento}{numeroDocumento}.usr` | `CC12345678.usr` |
+| Estudiante | `{prefijo_TipoDocumento}{numeroDocumento}.est` | `TI98765432.est` |
+| Docente | `{prefijo_TipoDocumento}{numeroDocumento}.doce` | `CC11223344.doce` |
+| Grupo | `{codigo}.grp` | `GRUP001.grp` |
+| Reserva | `{codigo}.res` | `PB-001.res` |
+| Datos de la academia | `NousAcademy.txt` | `NousAcademy.txt` |
+
+El prefijo del tipo de documento corresponde a los **dos primeros caracteres** del nombre del enum `TipoDocumento` (`name().substring(0, 2)`). Por ejemplo, `CEDULA_CIUDADANIA` → `CC`, `TARJETA_IDENTIDAD` → `TI`.
+
+<Warning>
+  Si el tipo o el número de documento de una entidad se modifican mediante `actualizarUsuario`, `actualizarEstudiante` o `actualizarDocente`, el archivo con el nombre antiguo se elimina y se crea uno nuevo con el nombre actualizado. De lo contrario, quedarían archivos huérfanos en disco.
+</Warning>
+
+---
+
+## Archivo de datos de la academia
+
+`datos/NousAcademy.txt` es el único archivo de texto plano del sistema. Contiene exactamente **5 líneas**, una por campo:
+
+```
+900123456-1
+NOUS ACADEMY SAS
+3001234567
+admin@nousacademy.co
+15000000.0
+```
+
+| Línea | Campo |
+|---|---|
+| 1 | `nit` |
+| 2 | `nombre` |
+| 3 | `telefono` |
+| 4 | `correo` |
+| 5 | `capital` (representación en texto de `double`) |
+
+Cualquier setter del controlador que modifique estos campos (`setNit`, `setNombre`, `setTelefono`, `setCorreo`, `inyectarCapital`, `retirarCapital`, `asignarMembresiaDefinida`, `asignarMembresiaPersonalizada`, `asignarContrato`) reescribe el archivo completo.
+
+---
+
+## Estructura del directorio `datos/`
+
+```
+datos/
+├── NousAcademy.txt          # Datos de la empresa (texto plano, 5 líneas)
+├── CC12345678.usr           # Administrador con CC 12345678
+├── TI98765432.est           # Estudiante con TI 98765432
+├── CC11223344.doce          # Docente con CC 11223344
+├── GRUP001.grp              # Grupo con código GRUP001
+├── PB-001.res               # Reserva de clase grupal PB-001
+└── PV-001.res               # Reserva de clase personalizada PV-001
+```
+
+<Tip>
+  El directorio `datos/` debe existir antes de ejecutar la aplicación. `BootClass` no lo crea automáticamente; si no existe, `directorio.listFiles()` retorna `null` y el arranque falla silenciosamente.
+</Tip>
+
+---
+
+## Secuencia de arranque (`BootClass`)
+
+`BootClass` se instancia en el punto de entrada de la interfaz gráfica. Su construcción ejecuta automáticamente la carga de la empresa; los demás métodos deben llamarse explícitamente en orden.
+
+<Steps>
+
+<Step title="cargarEmpresa()">
+  Lee `datos/NousAcademy.txt` línea por línea con `BufferedReader` y construye el `AcademiaController` con los 5 valores leídos (nit, nombre, teléfono, correo, capital).
+
+  ```java
+  String[] datosEmpresa = cargarEmpresa();
+  AcademiaController nousAcademy = new AcademiaController(
+      datosEmpresa[0], datosEmpresa[1],
+      datosEmpresa[2], datosEmpresa[3],
+      Double.parseDouble(datosEmpresa[4])
+  );
+  ```
+</Step>
+
+<Step title="cargarUsuarios()">
+  Itera sobre `datos/`, filtra los archivos con extensión `.usr` y deserializa cada uno como `Usuario`. Llama a `nousAcademy.setUsuarios(u)`.
+
+  ```java
+  String extension = ".usr";
+  for (File i : archivos) {
+      if (i.isFile() && i.getName().endsWith(extension)) {
+          // deserializar y añadir al arreglo
+      }
+  }
+  nousAcademy.setUsuarios(u);
+  ```
+</Step>
+
+<Step title="cargarEstudiantes()">
+  Mismo proceso con extensión `.est`. Deserializa como `Estudiante` y llama a `nousAcademy.setEstudiantes(e)`.
+</Step>
+
+<Step title="cargarDocentes()">
+  Mismo proceso con extensión `.doce`. Deserializa como `Docente` y llama a `nousAcademy.setDocentes(d)`.
+</Step>
+
+<Step title="cargarReservas()">
+  Mismo proceso con extensión `.res`. Deserializa como `Reserva` y llama a `nousAcademy.setReservas(res)`.
+</Step>
+
+<Step title="cargarGrupos()">
+  Mismo proceso con extensión `.grp`. Deserializa como `Grupo` y llama a `nousAcademy.setGrupos(g)`.
+</Step>
+
+</Steps>
+
+Al finalizar la secuencia, `BootClass.getNousAcademy()` entrega el controlador completamente inicializado a la capa de interfaz:
+
+```java
+public AcademiaController getNousAcademy() {
+    return this.nousAcademy;
+}
+```
+
+---
+
+## `serialVersionUID` por entidad
+
+Todos los `serialVersionUID` son constantes `public static final long` (excepto los de `Docente` y `Grupo`, que son `private static final long`). Un cambio en cualquiera de estos valores hace incompatibles los archivos existentes en disco.
+
+| Clase | serialVersionUID |
+|---|---|
+| `Usuario` | `20012008L` |
+| `Estudiante` | `3344556677L` |
+| `Docente` | `8389739L` |
+| `Clase` (abstracta) | `725346738L` |
+| `Reserva` | `10349922455673L` |
+| `Grupo` | `747463748L` |
+| `Membresia` | `213L` |
+| `Contrato` | `1L` |
+
+<Warning>
+  Si se modifica la estructura de una clase serializable (añadir/eliminar campos) sin actualizar el `serialVersionUID`, Java lanzará `InvalidClassException` al intentar deserializar archivos guardados con la versión anterior.
+</Warning>

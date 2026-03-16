@@ -1,0 +1,267 @@
+---
+title: 'Membresías'
+description: 'Tipos de membresía, ciclo de vida, estados y métodos del controlador para asignar membresías a estudiantes.'
+---
+
+Una **membresía** define el plan de acceso de un estudiante a la academia: establece el precio, la vigencia y la cantidad de clases privadas incluidas. El modelo vive en `contabilidad/Membresia.java` e implementa la interfaz `ComportamientoContable`.
+
+## Campos del modelo
+
+```java
+// contabilidad/Membresia.java
+public class Membresia implements ComportamientoContable, Serializable {
+
+    private static int serial = 0;
+
+    private String         codigo;           // MEM + serial de 4 dígitos
+    private TipoMembresia  tipoMembresia;
+    private LocalDate      fechaInicio;
+    private LocalDate      fechaVencimiento; // = fechaInicio + meses
+    private double         precio;
+    private EstadoMembresia estadoMembresia;
+    private int            clasesPrivadas;
+    private int            meses;
+}
+```
+
+| Campo | Tipo | Descripción |
+|---|---|---|
+| `codigo` | `String` | Identificador único. Formato: `MEM0001`, `MEM0002`, … |
+| `tipoMembresia` | `TipoMembresia` | Tipo de plan asignado |
+| `fechaInicio` | `LocalDate` | Fecha de inicio (hoy o futura) |
+| `fechaVencimiento` | `LocalDate` | Calculado automáticamente: `fechaInicio + meses` |
+| `precio` | `double` | Costo total de la membresía |
+| `estadoMembresia` | `EstadoMembresia` | Estado actual del plan |
+| `clasesPrivadas` | `int` | Total de clases privadas incluidas |
+| `meses` | `int` | Duración del plan en meses |
+
+## Tipos de membresía
+
+```java
+// contabilidad/TipoMembresia.java
+public enum TipoMembresia {
+    BASICA,
+    INTENSIVA,
+    PREMIUM,
+    PERSONALIZADA;
+}
+```
+
+### Comparativa de planes
+
+| Plan | Precio por mes | Clases privadas/mes | Notas |
+|---|---|---|---|
+| `BASICA` | $1,200,000 | 0 | Sin acceso a clases privadas |
+| `INTENSIVA` | $2,200,000 | 4 | 4 clases privadas por mes de contrato |
+| `PREMIUM` | $3,500,000 | 8 | 8 clases privadas por mes de contrato |
+| `PERSONALIZADA` | Definido por admin | Definido por admin | Solo asignable mediante `asignarMembresiaPersonalizada()` |
+
+Los precios y clases de los planes definidos se calculan directamente al construir la membresía:
+
+```java
+// contabilidad/Membresia.java — constructor para tipo definido
+switch (tipoMembresia) {
+    case BASICA:
+        this.clasesPrivadas = 0;
+        this.precio = 1200000 * meses;
+        break;
+    case INTENSIVA:
+        this.clasesPrivadas = 4 * meses;
+        this.precio = 2200000 * meses;
+        break;
+    case PREMIUM:
+        this.clasesPrivadas = 8 * meses;
+        this.precio = 3500000 * meses;
+        break;
+    default:
+        throw new TipoMembresiaInvalida();
+}
+```
+
+<Note>
+Si se intenta crear una membresía de tipo definido pasando `TipoMembresia.PERSONALIZADA` al constructor de tipo definido, se lanza `TipoMembresiaInvalida`. El plan personalizado tiene su propio constructor.
+</Note>
+
+## Estados de membresía
+
+```java
+// contabilidad/EstadoMembresia.java
+public enum EstadoMembresia {
+    CANCELADA,
+    SUSPENDIDA,
+    EN_PROGRESO;
+}
+```
+
+<CardGroup cols={3}>
+  <Card title="EN_PROGRESO" icon="circle-play">
+    Estado inicial al crear la membresía. El estudiante tiene acceso completo al plan.
+  </Card>
+  <Card title="SUSPENDIDA" icon="circle-pause">
+    Membresía pausada temporalmente. Asignable manualmente por el administrador.
+  </Card>
+  <Card title="CANCELADA" icon="circle-x">
+    La membresía fue sustituida por una nueva o cancelada de forma explícita. Se mueve al `historialMembresias` del estudiante.
+  </Card>
+</CardGroup>
+
+## Ciclo de vida y sustitución automática
+
+Cuando el administrador asigna una nueva membresía a un estudiante que ya tiene una activa, el sistema **cancela automáticamente** la membresía anterior y la archiva en `historialMembresias[]`.
+
+```java
+// usuarios/Estudiante.java — asignarMembresia() (tipo definido)
+public void asignarMembresia(TipoMembresia tipo,
+                             LocalDate fechaInicio, int meses)
+        throws FechaInvalida, ValoresNegativos,
+               TipoMembresiaInvalida, EstadoMembresiaInvalido {
+
+    if (this.membresia == null) {
+        this.membresia = new Membresia(tipo, fechaInicio, meses);
+    } else {
+        // Cancela la membresía actual y la guarda en el historial
+        this.membresia.actualizarEstadoMembresia(EstadoMembresia.CANCELADA);
+        this.historialMembresias = Arrays.copyOf(
+            this.historialMembresias, this.historialMembresias.length + 1);
+        this.historialMembresias[this.historialMembresias.length - 1] = this.membresia;
+        this.membresia = new Membresia(tipo, fechaInicio, meses);
+    }
+    // Actualiza el contador de clases privadas disponibles
+    this.clasesPrivadasRestantes = this.membresia.getClasesPrivadas();
+}
+```
+
+<Warning>
+Al asignar una nueva membresía, la anterior queda en estado `CANCELADA` de forma inmediata. Esta acción **no puede deshacerse** desde la interfaz.
+</Warning>
+
+## Impacto comercial
+
+La membresía implementa `ComportamientoContable`. Su `impactoComercial()` devuelve el precio completo, que el controlador suma al capital de la academia.
+
+```java
+// contabilidad/Membresia.java
+@Override
+public double impactoComercial() {
+    return this.precio;
+}
+```
+
+```java
+// controller/AcademiaController.java — asignarMembresiaDefinida()
+Estudiante e = this.buscarUnEstudiante(tipoDocumento, numeroDocumento);
+e.asignarMembresia(tipo, fechaInicio, meses);
+this.capital += e.getMembresia().impactoComercial(); // suma al capital
+```
+
+## Validaciones
+
+<AccordionGroup>
+  <Accordion title="Fecha de inicio inválida (FechaInvalida)">
+    La `fechaInicio` no puede ser `null` ni anterior al día de hoy. Aplica tanto al constructor de membresía definida como al de personalizada.
+
+    ```java
+    if (fechaInicio == null || fechaInicio.isBefore(LocalDate.now())) {
+        throw new FechaInvalida();
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Valores negativos o cero (ValoresNegativos)">
+    El precio debe ser mayor que cero, las clases privadas mayor o igual a cero y los meses mayor que cero.
+
+    ```java
+    // Constructor personalizado
+    if (precio <= 0 || clasesPrivadas < 0 || meses <= 0) {
+        throw new ValoresNegativos();
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Tipo de membresía inválido (TipoMembresiaInvalida)">
+    El constructor de tipo definido rechaza `null` y el valor `PERSONALIZADA` (que tiene su propio constructor).
+
+    ```java
+    if (tipoMembresia == null) throw new TipoMembresiaInvalida();
+    if (tipoMembresia == TipoMembresia.PERSONALIZADA) throw new TipoMembresiaInvalida();
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Métodos del controlador
+
+<Tabs>
+  <Tab title="asignarMembresiaDefinida()">
+    Asigna un plan `BASICA`, `INTENSIVA` o `PREMIUM` al estudiante indicado.
+
+    ```java
+    // controller/AcademiaController.java
+    public void asignarMembresiaDefinida(
+            TipoDocumento tipoDocumento, String numeroDocumento,
+            TipoMembresia tipo, LocalDate fechaInicio, int meses)
+            throws FechaInvalida, ValoresNegativos, TipoMembresiaInvalida,
+                   EstadoMembresiaInvalido, ElementoNoExistente, IOException {
+        Estudiante e = this.buscarUnEstudiante(tipoDocumento, numeroDocumento);
+        e.asignarMembresia(tipo, fechaInicio, meses);
+        this.capital += e.getMembresia().impactoComercial();
+        e.copiarFicheroUsuario(
+            base + e.getTipoDocumento().name().substring(0, 2)
+                 + e.getNumeroDocumento() + ".est");
+        // ... actualiza NousAcademy.txt con el nuevo capital ...
+    }
+    ```
+  </Tab>
+
+  <Tab title="asignarMembresiaPersonalizada()">
+    Permite al administrador definir precio y clases privadas de forma libre.
+
+    ```java
+    // controller/AcademiaController.java
+    public void asignarMembresiaPersonalizada(
+            TipoDocumento tipoDocumento, String numeroDocumento,
+            LocalDate fechaInicio, double precio,
+            int clasesPrivadas, int meses)
+            throws ValoresNegativos, FechaInvalida, EstadoMembresiaInvalido,
+                   ElementosVacios, ElementoNoExistente, IOException {
+        Estudiante e = this.buscarUnEstudiante(tipoDocumento, numeroDocumento);
+        e.asignarMembresia(fechaInicio, precio, clasesPrivadas, meses);
+        this.capital += e.getMembresia().impactoComercial();
+        e.copiarFicheroUsuario(
+            base + e.getTipoDocumento().name().substring(0, 2)
+                 + e.getNumeroDocumento() + ".est");
+        // ... actualiza NousAcademy.txt con el nuevo capital ...
+    }
+    ```
+  </Tab>
+
+  <Tab title="actualizarEstadoMembresia()">
+    Cambia el estado de la membresía activa del estudiante a cualquier valor del enum `EstadoMembresia`.
+
+    ```java
+    // controller/AcademiaController.java
+    public void actualizarEstadoMembresia(
+            TipoDocumento tipoDocumento, String numeroDocumento,
+            EstadoMembresia estado)
+            throws ElementoNoExistente, EstadoMembresiaInvalido, IOException {
+        Estudiante e = this.buscarUnEstudiante(tipoDocumento, numeroDocumento);
+        e.actualizarEstadoMembresia(estado);
+        e.copiarFicheroUsuario(
+            base + e.getTipoDocumento().name().substring(0, 2)
+                 + e.getNumeroDocumento() + ".est");
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Generación del código
+
+```java
+// contabilidad/Membresia.java
+@Override
+public String generarCodigo(String sufijo) {
+    serial++;
+    return sufijo + String.format("%04d", serial);
+}
+```
+
+A diferencia del código de grupo (3 dígitos), el código de membresía usa **4 dígitos**: `MEM0001`, `MEM0002`, …

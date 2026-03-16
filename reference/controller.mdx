@@ -1,0 +1,1032 @@
+---
+title: 'AcademiaController'
+description: 'Referencia completa de todos los métodos del controlador raíz de NOUS ACADEMY, agrupados por dominio.'
+---
+
+`AcademiaController` es el único punto de entrada a la lógica de negocio de la aplicación. La capa de interfaz gráfica (Swing) interactúa exclusivamente con esta clase. Toda operación de escritura persiste el estado en disco de forma inmediata.
+
+```java
+// Constructor
+public AcademiaController(String nit, String nombre, String telefono,
+                           String correo, double capital)
+```
+
+<Note>
+  Los parámetros `tipoDocumento` y `numeroDocumento` son la clave primaria compuesta de `Usuario`, `Estudiante` y `Docente`. Toda búsqueda y eliminación los requiere en combinación.
+</Note>
+
+---
+
+## Información de la empresa
+
+### Getters
+
+| Método | Retorno | Descripción |
+|---|---|---|
+| `getNit()` | `String` | NIT de la academia. |
+| `getNombre()` | `String` | Nombre comercial. |
+| `getTelefono()` | `String` | Teléfono de contacto. |
+| `getCorreo()` | `String` | Correo institucional. |
+| `getCapital()` | `double` | Capital disponible actual. |
+
+### Setters (persisten en `NousAcademy.txt`)
+
+<AccordionGroup>
+
+<Accordion title="setNit(String nit)">
+
+Actualiza el NIT y reescribe `datos/NousAcademy.txt`.
+
+<ParamField path="nit" type="String" required>
+  Nuevo NIT de la academia.
+</ParamField>
+
+**Lanza:** `IOException`
+
+```java
+public void setNit(String nit) throws IOException
+```
+
+</Accordion>
+
+<Accordion title="setNombre(String nombre)">
+
+Actualiza el nombre comercial y reescribe `datos/NousAcademy.txt`.
+
+<ParamField path="nombre" type="String" required>
+  Nuevo nombre de la academia.
+</ParamField>
+
+**Lanza:** `IOException`
+
+```java
+public void setNombre(String nombre) throws IOException
+```
+
+</Accordion>
+
+<Accordion title="setTelefono(String telefono)">
+
+Valida que el teléfono no sea negativo antes de persistirlo.
+
+<ParamField path="telefono" type="String" required>
+  Nuevo teléfono. Debe representar un número no negativo.
+</ParamField>
+
+**Lanza:** `IOException`, `ValoresNegativos`, `IllegalArgumentException`
+
+```java
+public void setTelefono(String telefono)
+        throws IOException, ValoresNegativos, IllegalArgumentException
+```
+
+</Accordion>
+
+<Accordion title="setCorreo(String correo)">
+
+Valida que el correo contenga `@` y termine en `nousacademy.co`.
+
+<ParamField path="correo" type="String" required>
+  Correo institucional. Debe terminar en `nousacademy.co`.
+</ParamField>
+
+**Lanza:** `IOException`, `CorreoNoValido`
+
+```java
+public void setCorreo(String correo) throws IOException, CorreoNoValido
+```
+
+</Accordion>
+
+</AccordionGroup>
+
+---
+
+## Capital
+
+<AccordionGroup>
+
+<Accordion title="inyectarCapital(float capital)">
+
+Suma la cantidad al capital de la empresa y persiste el archivo `NousAcademy.txt`.
+
+<ParamField path="capital" type="float" required>
+  Monto a inyectar. Debe ser mayor o igual a 0.
+</ParamField>
+
+**Retorna:** `void`  
+**Lanza:** `ValoresNegativos`, `IOException`
+
+```java
+public void inyectarCapital(float capital) throws ValoresNegativos, IOException
+```
+
+</Accordion>
+
+<Accordion title="retirarCapital(float capital)">
+
+Descuenta la cantidad del capital. Falla si el capital resultante sería negativo.
+
+<ParamField path="capital" type="float" required>
+  Monto a retirar. Debe ser mayor o igual a 0 y no superar el capital disponible.
+</ParamField>
+
+**Retorna:** `void`  
+**Lanza:** `ValoresNegativos`, `IOException`, `ImposibleRetirar`
+
+```java
+public void retirarCapital(float capital)
+        throws ValoresNegativos, IOException, ImposibleRetirar
+```
+
+</Accordion>
+
+</AccordionGroup>
+
+---
+
+## Búsqueda individual
+
+Métodos internos de lógica reutilizados por todos los demás métodos del controlador. También accesibles desde la UI.
+
+<AccordionGroup>
+
+<Accordion title="buscarUnEstudiante(TipoDocumento, String)">
+
+<ParamField path="tipoDocumento" type="TipoDocumento" required>
+  Tipo de documento del estudiante.
+</ParamField>
+<ParamField path="numeroDocumento" type="String" required>
+  Número de documento del estudiante.
+</ParamField>
+
+**Retorna:** `Estudiante`  
+**Lanza:** `ElementoNoExistente`
+
+```java
+public Estudiante buscarUnEstudiante(TipoDocumento tipoDocumento,
+                                     String numeroDocumento)
+        throws ElementoNoExistente
+```
+
+</Accordion>
+
+<Accordion title="buscarUnDocente(TipoDocumento, String)">
+
+<ParamField path="tipoDocumento" type="TipoDocumento" required>
+  Tipo de documento del docente.
+</ParamField>
+<ParamField path="numeroDocumento" type="String" required>
+  Número de documento del docente.
+</ParamField>
+
+**Retorna:** `Docente`  
+**Lanza:** `ElementoNoExistente`
+
+```java
+public Docente buscarUnDocente(TipoDocumento tipoDocumento,
+                               String numeroDocumento)
+        throws ElementoNoExistente
+```
+
+</Accordion>
+
+<Accordion title="buscarUnUsuario(TipoDocumento, String)">
+
+<ParamField path="tipoDocumento" type="TipoDocumento" required>
+  Tipo de documento del administrador.
+</ParamField>
+<ParamField path="numeroDocumento" type="String" required>
+  Número de documento del administrador.
+</ParamField>
+
+**Retorna:** `Usuario`  
+**Lanza:** `ElementoNoExistente`
+
+```java
+public Usuario buscarUnUsuario(TipoDocumento tipoDocumento,
+                               String numeroDocumento)
+        throws ElementoNoExistente
+```
+
+</Accordion>
+
+<Accordion title="buscarUnGrupo(String codigo)">
+
+<ParamField path="codigo" type="String" required>
+  Código del grupo (p. ej., `GRUP001`).
+</ParamField>
+
+**Retorna:** `Grupo`  
+**Lanza:** `ElementoNoExistente`
+
+```java
+public Grupo buscarUnGrupo(String codigo) throws ElementoNoExistente
+```
+
+</Accordion>
+
+<Accordion title="buscarUnaReserva(String codigo)">
+
+<ParamField path="codigo" type="String" required>
+  Código de la reserva, equivalente al código de la clase asociada (p. ej., `PB-001`).
+</ParamField>
+
+**Retorna:** `Reserva`  
+**Lanza:** `ElementoNoExistente`
+
+```java
+public Reserva buscarUnaReserva(String codigo) throws ElementoNoExistente
+```
+
+</Accordion>
+
+</AccordionGroup>
+
+---
+
+## Administradores
+
+<AccordionGroup>
+
+<Accordion title="crearUsuario(...)">
+
+Crea un nuevo administrador, verifica duplicados por documento y por nombre de usuario, y persiste el objeto en `datos/{prefijo}{numeroDocumento}.usr`.
+
+<ParamField path="nombre" type="String" required>Nombre de pila. Mínimo 2 caracteres.</ParamField>
+<ParamField path="apellidos" type="String" required>Apellidos. Mínimo 2 caracteres.</ParamField>
+<ParamField path="telefono" type="String" required>Teléfono. Mínimo 5 dígitos, no negativo.</ParamField>
+<ParamField path="correo" type="String" required>Correo institucional terminado en `nousacademy.co`.</ParamField>
+<ParamField path="tipoDocumento" type="TipoDocumento" required>Tipo de documento.</ParamField>
+<ParamField path="numeroDocumento" type="String" required>Número de documento. Mínimo 5 dígitos, no negativo.</ParamField>
+<ParamField path="usuario" type="String" required>Nombre de usuario único.</ParamField>
+<ParamField path="contrasena" type="String" required>Contraseña.</ParamField>
+
+**Retorna:** `void`  
+**Lanza:** `ElementosVacios`, `CorreoNoValido`, `NombreNoValido`, `IOException`, `ValoresNegativos`, `LongitudNoValida`, `Duplicados`
+
+```java
+public void crearUsuario(String nombre, String apellidos, String telefono,
+                         String correo, TipoDocumento tipoDocumento,
+                         String numeroDocumento, String usuario, String contrasena)
+        throws ElementosVacios, CorreoNoValido, NombreNoValido,
+               IOException, ValoresNegativos, LongitudNoValida, Duplicados
+```
+
+</Accordion>
+
+<Accordion title="eliminarUsuario(TipoDocumento, String)">
+
+Elimina el administrador y borra su archivo `.usr` del directorio `datos/`.
+
+<ParamField path="tipoDocumento" type="TipoDocumento" required>Tipo de documento.</ParamField>
+<ParamField path="numeroDocumento" type="String" required>Número de documento.</ParamField>
+
+**Retorna:** `void`  
+**Lanza:** `ElementoNoExistente`
+
+```java
+public void eliminarUsuario(TipoDocumento tipoDocumento, String numeroDocumento)
+        throws ElementoNoExistente
+```
+
+</Accordion>
+
+<Accordion title="actualizarUsuario(...)">
+
+Actualiza los campos no vacíos del administrador. Los campos vacíos o `null` se omiten (actualización parcial). Al cambiar tipo o número de documento, elimina el archivo antiguo y crea uno nuevo.
+
+<ParamField path="originalTD" type="TipoDocumento" required>Tipo de documento original (clave de búsqueda).</ParamField>
+<ParamField path="originalND" type="String" required>Número de documento original (clave de búsqueda).</ParamField>
+<ParamField path="nombre" type="String">Nuevo nombre. Vacío para no modificar.</ParamField>
+<ParamField path="apellidos" type="String">Nuevos apellidos. Vacío para no modificar.</ParamField>
+<ParamField path="telefono" type="String">Nuevo teléfono. Vacío para no modificar.</ParamField>
+<ParamField path="correo" type="String">Nuevo correo. Vacío para no modificar.</ParamField>
+<ParamField path="tipoDocumento" type="TipoDocumento">`null` para no modificar.</ParamField>
+<ParamField path="numeroDocumento" type="String">Nuevo número. Vacío para no modificar.</ParamField>
+
+**Retorna:** `void`  
+**Lanza:** `CorreoNoValido`, `NombreNoValido`, `ElementoNoExistente`, `IOException`, `ValoresNegativos`
+
+```java
+public void actualizarUsuario(TipoDocumento originalTD, String originalND,
+                               String nombre, String apellidos, String telefono,
+                               String correo, TipoDocumento tipoDocumento,
+                               String numeroDocumento)
+        throws CorreoNoValido, NombreNoValido, ElementoNoExistente,
+               IOException, ValoresNegativos
+```
+
+</Accordion>
+
+<Accordion title="leerUsuarios()">
+
+**Retorna:** `Usuario[]` — clon del arreglo interno de administradores.
+
+```java
+public Usuario[] leerUsuarios()
+```
+
+</Accordion>
+
+</AccordionGroup>
+
+---
+
+## Estudiantes
+
+<AccordionGroup>
+
+<Accordion title="crearEstudiante(...)">
+
+Idéntico a `crearUsuario` pero crea un `Estudiante` y persiste en `.est`.
+
+<ParamField path="nombre" type="String" required>Nombre de pila.</ParamField>
+<ParamField path="apellidos" type="String" required>Apellidos.</ParamField>
+<ParamField path="telefono" type="String" required>Teléfono.</ParamField>
+<ParamField path="correo" type="String" required>Correo institucional.</ParamField>
+<ParamField path="tipoDocumento" type="TipoDocumento" required>Tipo de documento.</ParamField>
+<ParamField path="numeroDocumento" type="String" required>Número de documento.</ParamField>
+<ParamField path="usuario" type="String" required>Nombre de usuario único.</ParamField>
+<ParamField path="contrasena" type="String" required>Contraseña.</ParamField>
+
+**Retorna:** `void`  
+**Lanza:** `ElementosVacios`, `CorreoNoValido`, `NombreNoValido`, `IOException`, `ValoresNegativos`, `LongitudNoValida`, `Duplicados`
+
+```java
+public void crearEstudiante(String nombre, String apellidos, String telefono,
+                             String correo, TipoDocumento tipoDocumento,
+                             String numeroDocumento, String usuario, String contrasena)
+        throws ElementosVacios, CorreoNoValido, NombreNoValido,
+               IOException, ValoresNegativos, LongitudNoValida, Duplicados
+```
+
+</Accordion>
+
+<Accordion title="eliminarEstudiante(TipoDocumento, String)">
+
+Elimina el estudiante y borra su archivo `.est`.
+
+<ParamField path="tipoDocumento" type="TipoDocumento" required>Tipo de documento.</ParamField>
+<ParamField path="numeroDocumento" type="String" required>Número de documento.</ParamField>
+
+**Retorna:** `void`  
+**Lanza:** `ElementoNoExistente`
+
+```java
+public void eliminarEstudiante(TipoDocumento tipoDocumento, String numeroDocumento)
+        throws ElementoNoExistente
+```
+
+</Accordion>
+
+<Accordion title="actualizarEstudiante(...)">
+
+Actualización parcial del estudiante. Reemplaza el archivo `.est` antiguo por uno nuevo si cambian los identificadores.
+
+<ParamField path="originalTD" type="TipoDocumento" required>Tipo de documento original.</ParamField>
+<ParamField path="originalND" type="String" required>Número de documento original.</ParamField>
+<ParamField path="nombre" type="String">Vacío para no modificar.</ParamField>
+<ParamField path="apellidos" type="String">Vacío para no modificar.</ParamField>
+<ParamField path="telefono" type="String">Vacío para no modificar.</ParamField>
+<ParamField path="correo" type="String">Vacío para no modificar.</ParamField>
+<ParamField path="tipoDocumento" type="TipoDocumento">`null` para no modificar.</ParamField>
+<ParamField path="numeroDocumento" type="String">Vacío para no modificar.</ParamField>
+
+**Retorna:** `void`  
+**Lanza:** `CorreoNoValido`, `NombreNoValido`, `ElementoNoExistente`, `IOException`, `ValoresNegativos`
+
+```java
+public void actualizarEstudiante(TipoDocumento originalTD, String originalND,
+                                  String nombre, String apellidos, String telefono,
+                                  String correo, TipoDocumento tipoDocumento,
+                                  String numeroDocumento)
+        throws CorreoNoValido, NombreNoValido, ElementoNoExistente,
+               IOException, ValoresNegativos
+```
+
+</Accordion>
+
+<Accordion title="leerEstudiantes()">
+
+**Retorna:** `Estudiante[]` — clon del arreglo interno.
+
+```java
+public Estudiante[] leerEstudiantes()
+```
+
+</Accordion>
+
+<Accordion title="asignarMembresiaDefinida(...)">
+
+Asigna una membresía de tipo predefinido (`BASICA`, `INTENSIVA` o `PREMIUM`) al estudiante. El precio correspondiente se suma al capital de la academia.
+
+<ParamField path="tipoDocumento" type="TipoDocumento" required>Tipo de documento del estudiante.</ParamField>
+<ParamField path="numeroDocumento" type="String" required>Número de documento del estudiante.</ParamField>
+<ParamField path="tipo" type="TipoMembresia" required>Tipo de membresía predefinida. No puede ser `PERSONALIZADA`.</ParamField>
+<ParamField path="fechaInicio" type="LocalDate" required>Fecha de inicio. Debe ser hoy o futura.</ParamField>
+<ParamField path="meses" type="int" required>Duración en meses. Debe ser mayor que 0.</ParamField>
+
+**Retorna:** `void`  
+**Lanza:** `FechaInvalida`, `ValoresNegativos`, `TipoMembresiaInvalida`, `EstadoMembresiaInvalido`, `ElementoNoExistente`, `IOException`
+
+```java
+public void asignarMembresiaDefinida(TipoDocumento tipoDocumento,
+                                      String numeroDocumento,
+                                      TipoMembresia tipo,
+                                      LocalDate fechaInicio, int meses)
+        throws FechaInvalida, ValoresNegativos, TipoMembresiaInvalida,
+               EstadoMembresiaInvalido, ElementoNoExistente, IOException
+```
+
+</Accordion>
+
+<Accordion title="asignarMembresiaPersonalizada(...)">
+
+Asigna una membresía con precio y clases privadas libres. El precio se suma al capital de la academia.
+
+<ParamField path="tipoDocumento" type="TipoDocumento" required>Tipo de documento del estudiante.</ParamField>
+<ParamField path="numeroDocumento" type="String" required>Número de documento del estudiante.</ParamField>
+<ParamField path="fechaInicio" type="LocalDate" required>Fecha de inicio. Debe ser hoy o futura.</ParamField>
+<ParamField path="precio" type="double" required>Precio de la membresía. Mayor que 0.</ParamField>
+<ParamField path="clasesPrivadas" type="int" required>Créditos de clases personalizadas. Mayor o igual a 0.</ParamField>
+<ParamField path="meses" type="int" required>Duración en meses. Mayor que 0.</ParamField>
+
+**Retorna:** `void`  
+**Lanza:** `ValoresNegativos`, `FechaInvalida`, `EstadoMembresiaInvalido`, `ElementosVacios`, `ElementoNoExistente`, `IOException`
+
+```java
+public void asignarMembresiaPersonalizada(TipoDocumento tipoDocumento,
+                                           String numeroDocumento,
+                                           LocalDate fechaInicio, double precio,
+                                           int clasesPrivadas, int meses)
+        throws ValoresNegativos, FechaInvalida, EstadoMembresiaInvalido,
+               ElementosVacios, ElementoNoExistente, IOException
+```
+
+</Accordion>
+
+<Accordion title="actualizarEstadoMembresia(...)">
+
+Cambia el `EstadoMembresia` de la membresía activa del estudiante.
+
+<ParamField path="tipoDocumento" type="TipoDocumento" required>Tipo de documento del estudiante.</ParamField>
+<ParamField path="numeroDocumento" type="String" required>Número de documento del estudiante.</ParamField>
+<ParamField path="estado" type="EstadoMembresia" required>Nuevo estado (`EN_PROGRESO` o `CANCELADA`).</ParamField>
+
+**Retorna:** `void`  
+**Lanza:** `ElementoNoExistente`, `EstadoMembresiaInvalido`, `IOException`
+
+```java
+public void actualizarEstadoMembresia(TipoDocumento tipoDocumento,
+                                       String numeroDocumento,
+                                       EstadoMembresia estado)
+        throws ElementoNoExistente, EstadoMembresiaInvalido, IOException
+```
+
+</Accordion>
+
+<Accordion title="entrarGrupo(Estudiante, String)">
+
+Añade el estudiante logueado a un grupo existente. Persiste tanto el estudiante como el grupo.
+
+<ParamField path="estudiante" type="Estudiante" required>Instancia del estudiante logueado.</ParamField>
+<ParamField path="codigo" type="String" required>Código del grupo destino.</ParamField>
+
+**Retorna:** `void`  
+**Lanza:** `ElementoNoExistente`, `CantidadGruposExcedida`, `IOException`, `Duplicados`
+
+```java
+public void entrarGrupo(Estudiante estudiante, String codigo)
+        throws ElementoNoExistente, CantidadGruposExcedida, IOException, Duplicados
+```
+
+</Accordion>
+
+<Accordion title="salirseGrupo(Estudiante, String)">
+
+Elimina al estudiante logueado de un grupo.
+
+<ParamField path="estudiante" type="Estudiante" required>Instancia del estudiante logueado.</ParamField>
+<ParamField path="codigo" type="String" required>Código del grupo.</ParamField>
+
+**Retorna:** `void`  
+**Lanza:** `ElementoNoExistente`, `GrupoNoEncontrado`, `EstudianteNoEnGrupo`, `IOException`
+
+```java
+public void salirseGrupo(Estudiante estudiante, String codigo)
+        throws ElementoNoExistente, GrupoNoEncontrado, EstudianteNoEnGrupo, IOException
+```
+
+</Accordion>
+
+<Accordion title="reservarClase(Estudiante, String)">
+
+Inscribe al estudiante en una reserva existente. Descuenta un crédito de clase privada si la clase es personalizada.
+
+<ParamField path="estudiante" type="Estudiante" required>Instancia del estudiante logueado.</ParamField>
+<ParamField path="codigo" type="String" required>Código de la reserva.</ParamField>
+
+**Retorna:** `void`  
+**Lanza:** `ElementoNoExistente`, `ClasesPrivadasNoSuficientes`, `ClaseYaReservada`, `ClaseLlena`, `IOException`
+
+```java
+public void reservarClase(Estudiante estudiante, String codigo)
+        throws ElementoNoExistente, ClasesPrivadasNoSuficientes,
+               ClaseYaReservada, ClaseLlena, IOException
+```
+
+</Accordion>
+
+<Accordion title="cancelarResrva(Estudiante, String)">
+
+Cancela la inscripción del estudiante en una reserva. Solo es posible hasta 30 minutos antes del inicio.
+
+<ParamField path="estudiante" type="Estudiante" required>Instancia del estudiante logueado.</ParamField>
+<ParamField path="codigo" type="String" required>Código de la reserva.</ParamField>
+
+**Retorna:** `void`  
+**Lanza:** `ElementoNoExistente`, `EstudianteNoEnlistadoEnReserva`, `ClaseEnEstadoNoCancelar`, `ClaseNoEnEstudiante`, `IOException`
+
+```java
+public void cancelarResrva(Estudiante estudiante, String codigo)
+        throws ElementoNoExistente, EstudianteNoEnlistadoEnReserva,
+               ClaseEnEstadoNoCancelar, ClaseNoEnEstudiante, IOException
+```
+
+</Accordion>
+
+<Accordion title="calificarReserva(Estudiante, float, String)">
+
+Registra la calificación de un asistente para una reserva finalizada.
+
+<ParamField path="estudiante" type="Estudiante" required>Asistente que califica.</ParamField>
+<ParamField path="calificacion" type="float" required>Valor entre 1 y 5 (inclusive).</ParamField>
+<ParamField path="codigo" type="String" required>Código de la reserva.</ParamField>
+
+**Retorna:** `void`  
+**Lanza:** `ElementoNoExistente`, `ClaseEnEstadoNOCalificar`, `EstudianteNoEnlistadoEnReserva`, `IOException`, `CalificacionInvalida`
+
+```java
+public void calificarReserva(Estudiante estudiante, float calificacion, String codigo)
+        throws ElementoNoExistente, ClaseEnEstadoNOCalificar,
+               EstudianteNoEnlistadoEnReserva, IOException, CalificacionInvalida
+```
+
+</Accordion>
+
+<Accordion title="unirseReserva(Estudiante, String)">
+
+Confirma la asistencia del estudiante a una reserva `EN_CURSO`.
+
+<ParamField path="estudiante" type="Estudiante" required>Estudiante inscrito que se une.</ParamField>
+<ParamField path="codigo" type="String" required>Código de la reserva.</ParamField>
+
+**Retorna:** `void`  
+**Lanza:** `ElementoNoExistente`, `ClaseEnEstadoNoUnirse`, `EstudianteNoEnlistadoEnReserva`, `IOException`
+
+```java
+public void unirseReserva(Estudiante estudiante, String codigo)
+        throws ElementoNoExistente, ClaseEnEstadoNoUnirse,
+               EstudianteNoEnlistadoEnReserva, IOException
+```
+
+</Accordion>
+
+</AccordionGroup>
+
+---
+
+## Docentes
+
+<AccordionGroup>
+
+<Accordion title="crearDocente(...)">
+
+Crea un nuevo docente, verifica duplicados por documento y por nombre de usuario, y persiste en `.doce`.
+
+<ParamField path="nombre" type="String" required>Nombre de pila.</ParamField>
+<ParamField path="apellidos" type="String" required>Apellidos.</ParamField>
+<ParamField path="telefono" type="String" required>Teléfono.</ParamField>
+<ParamField path="correo" type="String" required>Correo institucional.</ParamField>
+<ParamField path="tipoDocumento" type="TipoDocumento" required>Tipo de documento.</ParamField>
+<ParamField path="numeroDocumento" type="String" required>Número de documento.</ParamField>
+<ParamField path="usuario" type="String" required>Nombre de usuario único.</ParamField>
+<ParamField path="contrasena" type="String" required>Contraseña.</ParamField>
+<ParamField path="especialidad" type="String" required>Área de especialidad. No puede estar vacío.</ParamField>
+
+**Retorna:** `void`  
+**Lanza:** `ElementosVacios`, `CorreoNoValido`, `NombreNoValido`, `IOException`, `ValoresNegativos`, `LongitudNoValida`, `Duplicados`
+
+```java
+public void crearDocente(String nombre, String apellidos, String telefono,
+                          String correo, TipoDocumento tipoDocumento,
+                          String numeroDocumento, String usuario,
+                          String contrasena, String especialidad)
+        throws ElementosVacios, CorreoNoValido, NombreNoValido,
+               IOException, ValoresNegativos, LongitudNoValida, Duplicados
+```
+
+</Accordion>
+
+<Accordion title="eliminarDocente(TipoDocumento, String) — del sistema">
+
+Elimina el docente del sistema y borra su archivo `.doce`.
+
+<ParamField path="tipoDocumento" type="TipoDocumento" required>Tipo de documento.</ParamField>
+<ParamField path="numeroDocumento" type="String" required>Número de documento.</ParamField>
+
+**Retorna:** `void`  
+**Lanza:** `ElementoNoExistente`
+
+```java
+public void eliminarDocente(TipoDocumento tipoDocumento, String numeroDocumento)
+        throws ElementoNoExistente
+```
+
+</Accordion>
+
+<Accordion title="actualizarDocente(...)">
+
+Actualización parcial del docente. Reemplaza el archivo `.doce` si cambian los identificadores.
+
+<ParamField path="originalTD" type="TipoDocumento" required>Tipo de documento original.</ParamField>
+<ParamField path="originalND" type="String" required>Número de documento original.</ParamField>
+<ParamField path="nombre" type="String">Vacío para no modificar.</ParamField>
+<ParamField path="apellidos" type="String">Vacío para no modificar.</ParamField>
+<ParamField path="telefono" type="String">Vacío para no modificar.</ParamField>
+<ParamField path="correo" type="String">Vacío para no modificar.</ParamField>
+<ParamField path="tipoDocumento" type="TipoDocumento">`null` para no modificar.</ParamField>
+<ParamField path="numeroDocumento" type="String">Vacío para no modificar.</ParamField>
+<ParamField path="especialidad" type="String">Vacío para no modificar.</ParamField>
+
+**Retorna:** `void`  
+**Lanza:** `CorreoNoValido`, `NombreNoValido`, `ElementoNoExistente`, `IOException`, `ValoresNegativos`
+
+```java
+public void actualizarDocente(TipoDocumento originalTD, String originalND,
+                               String nombre, String apellidos, String telefono,
+                               String correo, TipoDocumento tipoDocumento,
+                               String numeroDocumento, String especialidad)
+        throws CorreoNoValido, NombreNoValido, ElementoNoExistente,
+               IOException, ValoresNegativos
+```
+
+</Accordion>
+
+<Accordion title="leerDocentes()">
+
+**Retorna:** `Docente[]` — clon del arreglo interno.
+
+```java
+public Docente[] leerDocentes()
+```
+
+</Accordion>
+
+<Accordion title="asignarContrato(...)">
+
+Asigna un contrato al docente. Verifica que el capital de la academia cubra `salarioBase * meses` antes de crear el contrato. El impacto negativo se descuenta del capital.
+
+<ParamField path="tipoDocumento" type="TipoDocumento" required>Tipo de documento del docente.</ParamField>
+<ParamField path="numeroDocumento" type="String" required>Número de documento del docente.</ParamField>
+<ParamField path="fechaInicio" type="LocalDate" required>Fecha de inicio del contrato. Debe ser hoy o futura.</ParamField>
+<ParamField path="salarioBase" type="double" required>Salario mensual. Mayor que 0.</ParamField>
+<ParamField path="horasMinimas" type="double" required>Horas mínimas contractuales por mes. Mayor o igual a 0.</ParamField>
+<ParamField path="costoHoraA" type="double" required>Costo de hora adicional. Mayor o igual a 0.</ParamField>
+<ParamField path="meses" type="int" required>Duración en meses. Mayor que 0.</ParamField>
+
+**Retorna:** `void`  
+**Lanza:** `ElementoNoExistente`, `FechaInvalida`, `ValoresNegativos`, `EstadoContratoInvalido`, `DineroInsuficienteParaContratar`, `IOException`
+
+```java
+public void asignarContrato(TipoDocumento tipoDocumento, String numeroDocumento,
+                             LocalDate fechaInicio, double salarioBase,
+                             double horasMinimas, double costoHoraA, int meses)
+        throws ElementoNoExistente, FechaInvalida, ValoresNegativos,
+               EstadoContratoInvalido, DineroInsuficienteParaContratar, IOException
+```
+
+</Accordion>
+
+<Accordion title="actualizarEstadoContratoDocente(...)">
+
+Cambia el estado del contrato activo del docente.
+
+<ParamField path="tipoDocumento" type="TipoDocumento" required>Tipo de documento del docente.</ParamField>
+<ParamField path="numeroDocumento" type="String" required>Número de documento del docente.</ParamField>
+<ParamField path="estado" type="EstadoContrato" required>Nuevo estado (`ACTIVO` o `FINALIZADO`).</ParamField>
+
+**Retorna:** `void`  
+**Lanza:** `EstadoContratoInvalido`, `ElementosVacios`, `ElementoNoExistente`, `IOException`
+
+```java
+public void actualizarEstadoContratoDocente(TipoDocumento tipoDocumento,
+                                             String numeroDocumento,
+                                             EstadoContrato estado)
+        throws EstadoContratoInvalido, ElementosVacios, ElementoNoExistente, IOException
+```
+
+</Accordion>
+
+<Accordion title="asignarClase(TipoDocumento, String, String)">
+
+Asigna un docente a una reserva existente. Registra la reserva en el historial del docente y actualiza `EstadoDocente` a `ACEPTADA`.
+
+<ParamField path="tipoDocumento" type="TipoDocumento" required>Tipo de documento del docente.</ParamField>
+<ParamField path="numeroDocumento" type="String" required>Número de documento del docente.</ParamField>
+<ParamField path="codigo" type="String" required>Código de la reserva.</ParamField>
+
+**Retorna:** `void`  
+**Lanza:** `ElementoNoExistente`, `IOException`
+
+```java
+public void asignarClase(TipoDocumento tipoDocumento, String numeroDocumento,
+                          String codigo)
+        throws ElementoNoExistente, IOException
+```
+
+</Accordion>
+
+<Accordion title="cancelarDocente(TipoDocumento, String, String)">
+
+Desvincula el docente de una reserva. Actualiza `EstadoDocente` a `EN_ESPERA`.
+
+<ParamField path="tipoDocumento" type="TipoDocumento" required>Tipo de documento del docente.</ParamField>
+<ParamField path="numeroDocumento" type="String" required>Número de documento del docente.</ParamField>
+<ParamField path="codigo" type="String" required>Código de la reserva.</ParamField>
+
+**Retorna:** `void`  
+**Lanza:** `ElementoNoExistente`, `NingunDocenteAsignado`, `ReservaNoEnDocente`, `IOException`
+
+```java
+public void cancelarDocente(TipoDocumento tipoDocumento, String numeroDocumento,
+                             String codigo)
+        throws ElementoNoExistente, NingunDocenteAsignado,
+               ReservaNoEnDocente, IOException
+```
+
+</Accordion>
+
+</AccordionGroup>
+
+---
+
+## Reservas
+
+<AccordionGroup>
+
+<Accordion title="crearUnaReservaGrupal(...)">
+
+Crea una reserva para una clase grupal y la persiste en `datos/{codigo}.res`.
+
+<ParamField path="horaInicioEsperada" type="LocalDateTime" required>Fecha y hora de inicio. Debe ser futura.</ParamField>
+<ParamField path="titulo" type="String" required>Título de la clase.</ParamField>
+<ParamField path="descripcion" type="String" required>Descripción.</ParamField>
+<ParamField path="tema" type="String" required>Tema.</ParamField>
+<ParamField path="duracion" type="float" required>Duración en minutos. Mayor que 0.</ParamField>
+<ParamField path="aforoMin" type="int" required>Aforo mínimo. Mayor o igual a 0.</ParamField>
+<ParamField path="aforoMax" type="int" required>Aforo máximo. Mayor o igual a `aforoMin`.</ParamField>
+
+**Retorna:** `void`  
+**Lanza:** `ElementosVacios`, `AforoIncompatible`, `IOException`, `FechaInvalida`, `ValoresNegativos`
+
+```java
+public void crearUnaReservaGrupal(LocalDateTime horaInicioEsperada,
+                                   String titulo, String descripcion,
+                                   String tema, float duracion,
+                                   int aforoMin, int aforoMax)
+        throws ElementosVacios, AforoIncompatible, IOException,
+               FechaInvalida, ValoresNegativos
+```
+
+</Accordion>
+
+<Accordion title="crearUnaReservaPersonalizada(...)">
+
+Crea una reserva para una clase personalizada e inscribe inmediatamente al estudiante solicitante.
+
+<ParamField path="estudiante" type="Estudiante" required>Estudiante logueado que solicita la clase.</ParamField>
+<ParamField path="horaInicioEsperada" type="LocalDateTime" required>Fecha y hora de inicio. Debe ser futura.</ParamField>
+<ParamField path="titulo" type="String" required>Título.</ParamField>
+<ParamField path="descripcion" type="String" required>Descripción.</ParamField>
+<ParamField path="tema" type="String" required>Tema.</ParamField>
+<ParamField path="duracion" type="float" required>Duración en minutos. Mayor que 0.</ParamField>
+<ParamField path="info" type="String">Información adjunta adicional para el docente.</ParamField>
+
+**Retorna:** `void`  
+**Lanza:** `ElementosVacios`, `ClasesPrivadasNoSuficientes`, `ClaseYaReservada`, `ClaseLlena`, `IOException`, `FechaInvalida`, `ValoresNegativos`
+
+```java
+public void crearUnaReservaPersonalizada(Estudiante estudiante,
+                                          LocalDateTime horaInicioEsperada,
+                                          String titulo, String descripcion,
+                                          String tema, float duracion, String info)
+        throws ElementosVacios, ClasesPrivadasNoSuficientes, ClaseYaReservada,
+               ClaseLlena, IOException, FechaInvalida, ValoresNegativos
+```
+
+</Accordion>
+
+<Accordion title="eliminarReserva(String codigo) — del sistema">
+
+Cancela y elimina una reserva del sistema. Llama a `cancelacionAdministrativa()` (libera a los estudiantes inscritos) y borra el archivo `.res`.
+
+<ParamField path="codigo" type="String" required>Código de la reserva a eliminar.</ParamField>
+
+**Retorna:** `void`  
+**Lanza:** `ElementoNoExistente`
+
+```java
+public void eliminarReserva(String codigo) throws ElementoNoExistente
+```
+
+</Accordion>
+
+<Accordion title="leerReservas()">
+
+**Retorna:** `Reserva[]` — clon del arreglo interno.
+
+```java
+public Reserva[] leerReservas()
+```
+
+</Accordion>
+
+<Accordion title="inciarReserva(Docente, String)">
+
+Inicia la reserva. Solo puede ejecutarse entre 5 minutos antes y 10 minutos después de `horaInicioEsperada`. Si el docente llega con más de 10 minutos de retraso, el estado cambia a `TARDE` y se lanza `DocenteRetardado`. Para clases grupales, verifica que haya al menos `aforoMinimo` estudiantes inscritos.
+
+<ParamField path="docente" type="Docente" required>Docente logueado que inicia la clase.</ParamField>
+<ParamField path="codigo" type="String" required>Código de la reserva.</ParamField>
+
+**Retorna:** `void`  
+**Lanza:** `ElementoNoExistente`, `DocenteRetardado`, `ClaseEnEstadoNoIniciar`, `NoSuficienteAforo`, `IOException`
+
+```java
+public void inciarReserva(Docente docente, String codigo)
+        throws ElementoNoExistente, DocenteRetardado,
+               ClaseEnEstadoNoIniciar, NoSuficienteAforo, IOException
+```
+
+</Accordion>
+
+<Accordion title="finalizarReserva(Docente, String)">
+
+Finaliza la reserva en curso. Calcula la duración real. Si el docente termina con más de 25 minutos de anticipación, el estado pasa a `PREMATURA` y se lanza la excepción correspondiente (sanción).
+
+<ParamField path="docente" type="Docente" required>Docente logueado que finaliza la clase.</ParamField>
+<ParamField path="codigo" type="String" required>Código de la reserva.</ParamField>
+
+**Retorna:** `void`  
+**Lanza:** `ElementoNoExistente`, `ClaseNuncaIniciada`, `FinalizacionPrematuraDeReserva`, `IOException`
+
+```java
+public void finalizarReserva(Docente docente, String codigo)
+        throws ElementoNoExistente, ClaseNuncaIniciada,
+               FinalizacionPrematuraDeReserva, IOException
+```
+
+</Accordion>
+
+</AccordionGroup>
+
+---
+
+## Grupos
+
+<AccordionGroup>
+
+<Accordion title="crearGrupo(String, String)">
+
+Crea un nuevo grupo con código autogenerado y lo persiste en `datos/{codigo}.grp`.
+
+<ParamField path="nombre" type="String" required>Nombre del grupo. No puede estar vacío.</ParamField>
+<ParamField path="descripcion" type="String" required>Descripción. No puede estar vacía.</ParamField>
+
+**Retorna:** `void`  
+**Lanza:** `ElementosVacios`, `IOException`
+
+```java
+public void crearGrupo(String nombre, String descripcion)
+        throws ElementosVacios, IOException
+```
+
+</Accordion>
+
+<Accordion title="actualizarGrupo(String, String, String)">
+
+Actualiza el nombre y/o la descripción del grupo. Los campos vacíos se omiten.
+
+<ParamField path="codigo" type="String" required>Código del grupo.</ParamField>
+<ParamField path="nombre" type="String">Nuevo nombre. Vacío para no modificar.</ParamField>
+<ParamField path="descripcion" type="String">Nueva descripción. Vacío para no modificar.</ParamField>
+
+**Retorna:** `void`  
+**Lanza:** `ElementoNoExistente`, `IOException`
+
+```java
+public void actualizarGrupo(String codigo, String nombre, String descripcion)
+        throws ElementoNoExistente, IOException
+```
+
+</Accordion>
+
+<Accordion title="eliminarGrupo(String)">
+
+Elimina el grupo del sistema. Llama a `eliminacionAdministrativa()` para desvincular a todos los estudiantes miembros, y borra el archivo `.grp`.
+
+<ParamField path="codigo" type="String" required>Código del grupo.</ParamField>
+
+**Retorna:** `void`  
+**Lanza:** `ElementoNoExistente`, `GrupoNoEncontrado`
+
+```java
+public void eliminarGrupo(String codigo) throws ElementoNoExistente, GrupoNoEncontrado
+```
+
+</Accordion>
+
+<Accordion title="leerGrupos()">
+
+**Retorna:** `Grupo[]` — clon del arreglo interno.
+
+```java
+public Grupo[] leerGrupos()
+```
+
+</Accordion>
+
+<Accordion title="añadirDocente(TipoDocumento, String, String)">
+
+Añade un docente a un grupo. Persiste tanto el docente como el grupo.
+
+<ParamField path="tipoDocumento" type="TipoDocumento" required>Tipo de documento del docente.</ParamField>
+<ParamField path="numeroDocumento" type="String" required>Número de documento del docente.</ParamField>
+<ParamField path="codigo" type="String" required>Código del grupo destino.</ParamField>
+
+**Retorna:** `void`  
+**Lanza:** `ElementoNoExistente`, `IOException`
+
+```java
+public void añadirDocente(TipoDocumento tipoDocumento, String numeroDocumento,
+                           String codigo)
+        throws ElementoNoExistente, IOException
+```
+
+</Accordion>
+
+<Accordion title="anadirReserva(String, String)">
+
+Asocia una reserva existente a un grupo. Persiste tanto la reserva como el grupo.
+
+<ParamField path="codigoGrupo" type="String" required>Código del grupo.</ParamField>
+<ParamField path="codigoReserva" type="String" required>Código de la reserva.</ParamField>
+
+**Retorna:** `void`  
+**Lanza:** `ElementoNoExistente`, `IOException`
+
+```java
+public void anadirReserva(String codigoGrupo, String codigoReserva)
+        throws ElementoNoExistente, IOException
+```
+
+</Accordion>
+
+<Accordion title="eliminarReserva(String, String) — de un grupo">
+
+Desvincula una reserva de un grupo específico. No elimina la reserva del sistema.
+
+<ParamField path="codigoGrupo" type="String" required>Código del grupo.</ParamField>
+<ParamField path="codigoReserva" type="String" required>Código de la reserva a desvincular.</ParamField>
+
+**Retorna:** `void`  
+**Lanza:** `ElementoNoExistente`, `ReservaNoEncontradaEnGrupo`, `IOException`
+
+```java
+public void eliminarReserva(String codigoGrupo, String codigoReserva)
+        throws ElementoNoExistente, ReservaNoEncontradaEnGrupo, IOException
+```
+
+</Accordion>
+
+<Accordion title="eliminarDocente(TipoDocumento, String, String) — de un grupo">
+
+Desvincula un docente de un grupo. No elimina el docente del sistema.
+
+<ParamField path="tipoDocumento" type="TipoDocumento" required>Tipo de documento del docente.</ParamField>
+<ParamField path="numeroDocumento" type="String" required>Número de documento del docente.</ParamField>
+<ParamField path="codigo" type="String" required>Código del grupo.</ParamField>
+
+**Retorna:** `void`  
+**Lanza:** `ElementoNoExistente`, `DocenteNoEnGrupo`, `IOException`
+
+```java
+public void eliminarDocente(TipoDocumento tipoDocumento, String numeroDocumento,
+                             String codigo)
+        throws ElementoNoExistente, DocenteNoEnGrupo, IOException
+```
+
+</Accordion>
+
+</AccordionGroup>

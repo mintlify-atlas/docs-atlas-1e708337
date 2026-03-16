@@ -1,0 +1,168 @@
+---
+title: 'Clases grupales'
+description: 'Documentación de ClaseGrupal: aforo, validaciones, creación desde el controlador y persistencia en ficheros .res.'
+---
+
+Una clase grupal (`ClaseGrupal`) es una sesión abierta a varios estudiantes que tiene un aforo mínimo obligatorio y un aforo máximo permitido. Solo los **administradores** pueden crearlas a través del `AcademiaController`.
+
+## Campos adicionales
+
+Además de los campos heredados de `Clase`, `ClaseGrupal` incorpora:
+
+| Campo          | Tipo  | Descripción                                                         |
+|----------------|-------|---------------------------------------------------------------------|
+| `aforoMinimo`  | `int` | Número mínimo de estudiantes inscritos para que la clase pueda iniciar. |
+| `aforoMaximo`  | `int` | Número máximo de estudiantes permitidos. Al alcanzarlo la reserva pasa a `LLENA`. |
+| `aforoActual`  | `int` | Contador interno del aforo ocupado en un momento dado.              |
+
+```java
+// ClaseGrupal.java
+public class ClaseGrupal extends Clase implements Serializable {
+
+    private int aforoMinimo;
+    private int aforoMaximo;
+    private int aforoActual;
+
+    public ClaseGrupal(String titulo, String descripcion, String tema,
+                       float duracion, int aforoMinimo, int aforoMaximo)
+            throws ElementosVacios, AforoIncompatible {
+
+        super(titulo, descripcion, tema, duracion, "PB");
+
+        if (aforoMaximo < aforoMinimo) {
+            throw new AforoIncompatible();
+        }
+        this.aforoMinimo = aforoMinimo;
+        this.aforoMaximo = aforoMaximo;
+        this.aforoActual = 0; // inicia vacío
+    }
+}
+```
+
+## Validaciones y excepciones
+
+<Warning>
+  Si `aforoMaximo < aforoMinimo` se lanza `AforoIncompatible` en el constructor. La validación de valores negativos ocurre en el constructor de `Reserva` antes de instanciar la clase.
+</Warning>
+
+| Condición                                              | Excepción lanzada        | Momento                        |
+|--------------------------------------------------------|--------------------------|--------------------------------|
+| `aforoMaximo < aforoMinimo`                            | `AforoIncompatible`      | Al construir `ClaseGrupal`.    |
+| `aforoMin < 0` o `aforoMax < 0` o `duracion < 0`      | `ValoresNegativos`       | Al construir `Reserva`.        |
+| `estudiantes.length < aforoMinimo` al intentar iniciar | `NoSuficienteAforo`      | Al llamar `iniciarClase()`.    |
+| `estudiantes.length == aforoMaximo` tras inscripción   | Estado pasa a `LLENA`    | En `reservarEstudiante()`.     |
+
+```java
+// Reserva.java — verificación de aforo mínimo al iniciar
+if (this.clase instanceof ClaseGrupal) {
+    ClaseGrupal c = (ClaseGrupal) this.clase;
+    if (this.estudiantes.length < c.getAforoMinimo()) {
+        throw new NoSuficienteAforo();
+    }
+}
+```
+
+```java
+// Reserva.java — cierre automático cuando se alcanza el aforo máximo
+if (this.clase instanceof ClaseGrupal) {
+    ClaseGrupal c = (ClaseGrupal) this.clase;
+    if (this.estudiantes.length == c.getAforoMaximo()) {
+        this.estadoReserva = EstadoReserva.LLENA;
+    }
+}
+```
+
+## Creación desde el controlador
+
+Solo el administrador logueado puede crear una reserva grupal:
+
+```java
+// AcademiaController.java
+public void crearUnaReservaGrupal(
+        LocalDateTime horaInicioEsperada,
+        String titulo,
+        String descripcion,
+        String tema,
+        float duracion,
+        int aforoMin,
+        int aforoMax)
+        throws ElementosVacios, AforoIncompatible, IOException,
+               FechaInvalida, ValoresNegativos {
+
+    Reserva r = new Reserva(
+            horaInicioEsperada, titulo, descripcion,
+            tema, duracion, aforoMin, aforoMax);
+    this.reservas = Arrays.copyOf(this.reservas, this.reservas.length + 1);
+    this.reservas[this.reservas.length - 1] = r;
+    r.copiarFicheroReserva(base + r.getCodigo() + ".res");
+}
+```
+
+<Steps>
+  <Step title="Validar la fecha">
+    El constructor de `Reserva` comprueba que `horaInicioEsperada` no sea anterior a `LocalDateTime.now()`. Si lo es, lanza `FechaInvalida`.
+  </Step>
+  <Step title="Validar valores numéricos">
+    Se comprueba que `aforoMin`, `aforoMax` y `duracion` no sean negativos. Si alguno lo es, lanza `ValoresNegativos`.
+  </Step>
+  <Step title="Instanciar ClaseGrupal">
+    Se crea la `ClaseGrupal` con el sufijo `PB`. El código autogenerado tiene formato `PB-NNN`.
+  </Step>
+  <Step title="Registrar y persistir">
+    La reserva se añade al array `reservas[]` del controlador y se serializa en `datos/<código>.res`.
+  </Step>
+</Steps>
+
+## Generación del código
+
+```java
+// ClaseGrupal.java
+private static int contador = 1;
+
+@Override
+public String generarCodigo(String sufijo) {
+    String codigoGenerado = sufijo + "-" + String.format("%03d", contador);
+    contador++;
+    return codigoGenerado;
+}
+```
+
+Las clases grupales reciben códigos del tipo `PB-001`, `PB-002`, etc. El contador es compartido por todas las instancias de `ClaseGrupal` en la JVM.
+
+## Métodos de negocio
+
+### `cumpleAforoMinimo()`
+
+Retorna `true` si `aforoActual >= aforoMinimo`. El método `iniciarClase()` de `Reserva` lo utiliza internamente (comparando `estudiantes.length`) antes de iniciar la sesión.
+
+### `actualizarAforo(int nuevoAforo)`
+
+Actualiza `aforoActual`. Lanza `ValoresNegativos` si `nuevoAforo < 0` o si supera `aforoMaximo`.
+
+```java
+public void actualizarAforo(int nuevoAforo) throws ValoresNegativos {
+    if (nuevoAforo < 0 || nuevoAforo > aforoMaximo) {
+        throw new ValoresNegativos();
+    }
+    this.aforoActual = nuevoAforo;
+}
+```
+
+## Persistencia
+
+La reserva (y su `ClaseGrupal` embebida) se serializa en un fichero `.res`:
+
+```java
+// Reserva.java
+public void copiarFicheroReserva(String dir) throws IOException {
+    FileOutputStream f = new FileOutputStream(dir);
+    ObjectOutputStream b = new ObjectOutputStream(f);
+    b.writeObject((Reserva) this);
+    b.close();
+    f.close();
+}
+```
+
+<Tip>
+  El fichero se sobreescribe cada vez que el estado de la reserva cambia (inscripción de estudiante, inicio, finalización, etc.), manteniendo siempre el estado más reciente en disco.
+</Tip>

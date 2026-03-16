@@ -1,0 +1,246 @@
+---
+title: 'Contratos'
+description: 'Estructura, ciclo de vida y métodos del controlador para asignar y gestionar contratos de docentes en Nous Academy.'
+---
+
+Un **contrato** establece las condiciones laborales de un docente: salario base, duración, horas mínimas y costo de horas privadas adicionales. El modelo vive en `contabilidad/Contrato.java` e implementa `ComportamientoContable`.
+
+## Campos del modelo
+
+```java
+// contabilidad/Contrato.java
+public class Contrato implements ComportamientoContable, Serializable {
+
+    private static int serial = 0;
+
+    private String       codigo;                   // CON + serial de 3 dígitos
+    private LocalDate    fechaInicio;
+    private LocalDate    fechaFinalizacion;         // = fechaInicio + meses
+    private double       salarioBase;
+    private double       horasMinimas;
+    private double       costoHoraPrivadaAdicional;
+    private EstadoContrato estadoContato;
+    private int          meses;
+}
+```
+
+| Campo | Tipo | Descripción |
+|---|---|---|
+| `codigo` | `String` | Identificador único. Formato: `CON001`, `CON002`, … |
+| `fechaInicio` | `LocalDate` | Fecha de inicio (hoy o futura) |
+| `fechaFinalizacion` | `LocalDate` | Calculado: `fechaInicio + meses` |
+| `salarioBase` | `double` | Salario mensual del docente |
+| `horasMinimas` | `double` | Horas mínimas de trabajo al mes |
+| `costoHoraPrivadaAdicional` | `double` | Tarifa por cada hora privada extra |
+| `estadoContato` | `EstadoContrato` | Estado actual del contrato |
+| `meses` | `int` | Duración del contrato en meses |
+
+## Estados del contrato
+
+```java
+// contabilidad/EstadoContrato.java
+public enum EstadoContrato {
+    ACTIVO,
+    SUSPENDIDO,
+    FINALIZADO
+}
+```
+
+<CardGroup cols={3}>
+  <Card title="ACTIVO" icon="circle-play">
+    Estado inicial al crear el contrato. El docente está vinculado y puede impartir clases.
+  </Card>
+  <Card title="SUSPENDIDO" icon="circle-pause">
+    Contrato pausado temporalmente. Asignable por el administrador mediante `actualizarEstadoContratoDocente()`.
+  </Card>
+  <Card title="FINALIZADO" icon="circle-check">
+    El contrato ha concluido. Al finalizar, se desvincula del docente y se mueve a `historialContratos[]`.
+  </Card>
+</CardGroup>
+
+## Constructor y validaciones
+
+```java
+// contabilidad/Contrato.java
+public Contrato(LocalDate fechaInicio, double salarioBase,
+                double horasMinimas, double costoHoraPrivadaAdicional,
+                int meses)
+        throws FechaInvalida, ValoresNegativos {
+
+    if (fechaInicio == null || fechaInicio.isBefore(LocalDate.now())) {
+        throw new FechaInvalida();
+    }
+    if (salarioBase <= 0 || horasMinimas < 0
+            || costoHoraPrivadaAdicional < 0 || meses <= 0) {
+        throw new ValoresNegativos();
+    }
+
+    this.codigo                   = this.generarCodigo("CON");
+    this.salarioBase              = salarioBase;
+    this.horasMinimas             = horasMinimas;
+    this.costoHoraPrivadaAdicional = costoHoraPrivadaAdicional;
+    this.meses                    = meses;
+    this.fechaInicio              = fechaInicio;
+    this.fechaFinalizacion        = this.fechaInicio.plusMonths(meses);
+    this.estadoContato            = EstadoContrato.ACTIVO;
+}
+```
+
+<AccordionGroup>
+  <Accordion title="FechaInvalida">
+    La fecha de inicio no puede ser `null` ni anterior al día de hoy.
+  </Accordion>
+  <Accordion title="ValoresNegativos">
+    `salarioBase` debe ser mayor que cero. `horasMinimas` y `costoHoraPrivadaAdicional` deben ser mayores o iguales a cero. `meses` debe ser mayor que cero.
+  </Accordion>
+</AccordionGroup>
+
+## Impacto comercial
+
+Un contrato representa un **egreso** para la academia. `impactoComercial()` devuelve el costo total negativo del contrato.
+
+```java
+// contabilidad/Contrato.java
+@Override
+public double impactoComercial() {
+    return -(this.salarioBase * this.meses);
+}
+```
+
+El controlador aplica este impacto al capital de la academia en el momento de asignar el contrato:
+
+```java
+// controller/AcademiaController.java — asignarContrato()
+d.asignarContrato(fechaInicio, salarioBase, horasMinimas, costoHoraA, meses);
+this.capital += d.getContrato().impactoComercial(); // resta del capital
+```
+
+## Verificación de capital suficiente
+
+Antes de crear el contrato, el controlador verifica que la academia disponga de fondos para cubrir el salario total del período. Si no es así, lanza `DineroInsuficienteParaContratar`.
+
+```java
+// controller/AcademiaController.java
+public void asignarContrato(
+        TipoDocumento tipoDocumento, String numeroDocumento,
+        LocalDate fechaInicio, double salarioBase,
+        double horasMinimas, double costoHoraA, int meses)
+        throws ElementoNoExistente, FechaInvalida, ValoresNegativos,
+               EstadoContratoInvalido, DineroInsuficienteParaContratar, IOException {
+
+    if (this.capital < salarioBase * meses) {
+        throw new DineroInsuficienteParaContratar();
+    }
+    Docente d = buscarUnDocente(tipoDocumento, numeroDocumento);
+    d.asignarContrato(fechaInicio, salarioBase, horasMinimas, costoHoraA, meses);
+    this.capital += d.getContrato().impactoComercial();
+    d.copiarFicheroUsuario(
+        base + d.getTipoDocumento().name().substring(0, 2)
+             + d.getNumeroDocumento() + ".doce");
+    // ... actualiza NousAcademy.txt con el nuevo capital ...
+}
+```
+
+<Warning>
+Si el capital de la academia es menor que `salarioBase × meses`, la asignación se rechaza completamente. No se crea ningún contrato ni se modifica el estado del docente.
+</Warning>
+
+## Ciclo de vida y sustitución automática
+
+Cuando se asigna un nuevo contrato a un docente que ya tiene uno activo, el contrato anterior se marca como `FINALIZADO` con la fecha actual y se archiva en `historialContratos[]`.
+
+```java
+// usuarios/Docente.java — asignarContrato()
+public void asignarContrato(LocalDate fechaInicio, double salarioBase,
+        double horasMinimas, double costoHoraPrivadaAdicional, int meses)
+        throws FechaInvalida, ValoresNegativos, EstadoContratoInvalido {
+
+    if (this.contrato != null) {
+        this.contrato.actualizarEstadoContrato(EstadoContrato.FINALIZADO);
+        this.contrato.setFechaFinalizacion(LocalDate.now());
+        this.historialContratos = Arrays.copyOf(
+            this.historialContratos, this.historialContratos.length + 1);
+        this.historialContratos[this.historialContratos.length - 1] = this.contrato;
+    }
+    this.contrato = new Contrato(
+        fechaInicio, salarioBase, horasMinimas, costoHoraPrivadaAdicional, meses);
+}
+```
+
+<Note>
+El contrato anterior se finaliza con `LocalDate.now()` como fecha de finalización real, independientemente de la `fechaFinalizacion` original pactada.
+</Note>
+
+## Actualizar el estado de un contrato
+
+El administrador puede cambiar el estado del contrato activo de un docente. Si el nuevo estado es `FINALIZADO`, el contrato se desvincula del docente y se pone a `null`.
+
+```java
+// usuarios/Docente.java — actualizarEstadoContrato()
+public void actualizarEstadoContrato(EstadoContrato estado)
+        throws EstadoContratoInvalido, ElementosVacios {
+
+    if (estado == null || this.contrato == null) {
+        throw new ElementosVacios();
+    }
+    if (estado == EstadoContrato.FINALIZADO) {
+        this.contrato.actualizarEstadoContrato(estado);
+        this.contrato = null;   // el docente queda sin contrato activo
+    } else {
+        this.contrato.actualizarEstadoContrato(estado);
+    }
+}
+```
+
+```java
+// controller/AcademiaController.java
+public void actualizarEstadoContratoDocente(
+        TipoDocumento tipoDocumento, String numeroDocumento,
+        EstadoContrato estdo)
+        throws EstadoContratoInvalido, ElementosVacios,
+               ElementoNoExistente, IOException {
+    Docente d = buscarUnDocente(tipoDocumento, numeroDocumento);
+    d.actualizarEstadoContrato(estdo);
+    d.copiarFicheroUsuario(
+        base + d.getTipoDocumento().name().substring(0, 2)
+             + d.getNumeroDocumento() + ".doce");
+}
+```
+
+## Seguimiento de horas privadas adicionales
+
+El campo `horasPrivadasAdicionalesMes` del docente acumula las horas privadas impartidas en el mes en curso, que pueden superar el mínimo contractual y generar un costo adicional calculado con `costoHoraPrivadaAdicional`.
+
+```java
+// usuarios/Docente.java — fragmento de getters/setters
+public float getHorasPrivadasAdicionalesMes() {
+    return horasPrivadasAdicionalesMes;
+}
+
+public void setHorasPrivadasAdicionalesMes(float horasPrivadasAdicionalesMes) {
+    this.horasPrivadasAdicionalesMes = horasPrivadasAdicionalesMes;
+}
+```
+
+## Generación del código
+
+```java
+// contabilidad/Contrato.java
+@Override
+public String generarCodigo(String sufijo) {
+    serial++;
+    return sufijo + String.format("%03d", serial);
+}
+```
+
+El contrato usa un serial de **3 dígitos** (igual que `Grupo`): `CON001`, `CON002`, …
+
+## Resumen de excepciones
+
+| Excepción | Origen |
+|---|---|
+| `FechaInvalida` | `fechaInicio` nula o anterior a hoy |
+| `ValoresNegativos` | `salarioBase` ≤ 0, o valores de horas/meses inválidos |
+| `DineroInsuficienteParaContratar` | Capital de la academia menor que `salarioBase × meses` |
+| `EstadoContratoInvalido` | Estado `null` en `actualizarEstadoContrato()` |
+| `ElementosVacios` | Contrato o estado `null` en `actualizarEstadoContrato()` |

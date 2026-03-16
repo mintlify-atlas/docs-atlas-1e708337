@@ -1,0 +1,124 @@
+---
+title: 'Clases y reservas'
+description: 'Visión general del sistema de clases de Nous Academy: tipos de clase, generación de códigos y control de acceso por rol.'
+---
+
+Nous Academy organiza su oferta formativa en dos tipos de clase, ambos heredan de la clase abstracta `Clase` y se materializan siempre dentro de una `Reserva`.
+
+<CardGroup cols={2}>
+  <Card title="Clase grupal" icon="users" href="/features/classes/group-classes">
+    Clases abiertas con aforo mínimo y máximo. Creadas por administradores. Código con sufijo `PB`.
+  </Card>
+  <Card title="Clase personalizada" icon="user" href="/features/classes/personalized-classes">
+    Clases individuales 1 a 1. Creadas por el propio estudiante. Código con sufijo `PV`.
+  </Card>
+</CardGroup>
+
+## Clase base (`Clase`)
+
+Todos los tipos de clase comparten los atributos definidos en la clase abstracta `Clase`:
+
+| Campo        | Tipo     | Descripción                                |
+|--------------|----------|-----------------------------------------|
+| `codigo`     | `String` | Código único autogenerado (ej. `PB-001`). |
+| `titulo`     | `String` | Título descriptivo de la clase.           |
+| `descripcion`| `String` | Descripción ampliada del contenido.       |
+| `tema`       | `String` | Categoría o área temática.                |
+| `duracion`   | `float`  | Duración planificada en minutos.          |
+
+```java
+// Clase.java
+public abstract class Clase implements Serializable {
+
+    protected String codigo;
+    protected String titulo;
+    protected String descripcion;
+    protected String tema;
+    protected float duracion; // Minutos
+
+    public Clase(String titulo, String descripcion, String tema,
+                 float duracion, String sufijo) throws ElementosVacios {
+        if (titulo.isEmpty() || descripcion.isEmpty() || tema.isEmpty()
+                || duracion == 0 || sufijo.isEmpty()) {
+            throw new ElementosVacios();
+        }
+        this.codigo = this.generarCodigo(sufijo);
+        this.titulo = titulo;
+        this.descripcion = descripcion;
+        this.tema = tema;
+        this.duracion = duracion;
+    }
+
+    public abstract String generarCodigo(String sufijo);
+}
+```
+
+<Note>
+  Ningún campo del constructor puede estar vacío y `duracion` debe ser distinta de cero. Si alguna validación falla se lanza `ElementosVacios`.
+</Note>
+
+## Generación automática de códigos
+
+Cada subclase implementa `generarCodigo(String sufijo)` usando un **contador estático propio**. El formato es `<SUFIJO>-<NNN>`, donde `NNN` es un entero con cero a la izquierda de tres dígitos.
+
+| Tipo de clase       | Sufijo | Ejemplo   |
+|---------------------|--------|-----------|
+| `ClaseGrupal`       | `PB`   | `PB-001`  |
+| `ClasePersonalizada`| `PV`   | `PV-001`  |
+
+```java
+// Implementación en ClaseGrupal y ClasePersonalizada
+private static int contador = 1;
+
+@Override
+public String generarCodigo(String sufijo) {
+    String codigoGenerado = sufijo + "-" + String.format("%03d", contador);
+    contador++;
+    return codigoGenerado;
+}
+```
+
+<Warning>
+  El contador es estático y no se reinicia entre sesiones de la JVM. Si la aplicación se reinicia, el contador vuelve a 1; asegúrate de que los datos persistidos no entren en conflicto con nuevos códigos generados.
+</Warning>
+
+## Control de acceso por rol
+
+El sistema diferencia dos roles principales que interactúan con las clases de forma distinta:
+
+<CardGroup cols={2}>
+  <Card title="Administrador" icon="shield">
+    - Crea y elimina reservas de clases grupales.
+    - Asigna y cancela docentes en reservas.
+    - Puede realizar cancelaciones administrativas.
+  </Card>
+  <Card title="Estudiante" icon="graduation-cap">
+    - Crea sus propias reservas de clases personalizadas.
+    - Se inscribe y cancela su inscripción en clases grupales.
+    - Se une, califica y gestiona su participación en clases.
+  </Card>
+</CardGroup>
+
+El `AcademiaController` expone métodos separados según el actor:
+
+```java
+// Solo administrador
+public void crearUnaReservaGrupal(
+        LocalDateTime horaInicioEsperada, String titulo, String descripcion,
+        String tema, float duracion, int aforoMin, int aforoMax)
+        throws ElementosVacios, AforoIncompatible, IOException,
+               FechaInvalida, ValoresNegativos { ... }
+
+// Solo estudiante (recibe el estudiante logueado)
+public void crearUnaReservaPersonalizada(
+        Estudiante estudiante, LocalDateTime horaInicioEsperada, String titulo,
+        String descripcion, String tema, float duracion, String info)
+        throws ElementosVacios, ClasesPrivadasNoSuficientes, ClaseYaReservada,
+               ClaseLlena, IOException, FechaInvalida, ValoresNegativos { ... }
+```
+
+## Persistencia
+
+Cada reserva se serializa en un fichero binario con extensión `.res` dentro del directorio `datos/`. El nombre del fichero es el código de la clase asociada (por ejemplo, `datos/PB-001.res`).
+
+Para más detalle sobre el ciclo de vida completo de una reserva consulta la página de [Reservas](/features/classes/reservations).

@@ -1,0 +1,91 @@
+---
+title: "NOUS ACADEMY"
+description: "Sistema de gestión para academias privadas — administra usuarios, clases, grupos, membresías y contratos desde una sola aplicación."
+---
+
+<CardGroup cols={2}>
+  <Card title="Inicio rápido" icon="rocket" href="/quickstart">
+    Configura y ejecuta NOUS ACADEMY en minutos
+  </Card>
+  <Card title="Arquitectura" icon="sitemap" href="/architecture">
+    Conoce la estructura interna del sistema
+  </Card>
+  <Card title="Gestión de usuarios" icon="users" href="/features/users/administrators">
+    Administra estudiantes, docentes y administradores
+  </Card>
+  <Card title="Clases y reservas" icon="calendar" href="/features/classes/overview">
+    Programa clases grupales y personalizadas
+  </Card>
+</CardGroup>
+
+## ¿Qué es NOUS ACADEMY?
+
+NOUS ACADEMY es una aplicación de escritorio desarrollada en Java que permite a academias privadas gestionar de forma integral todas sus operaciones. Desde la inscripción de estudiantes hasta la firma de contratos con docentes, el sistema centraliza la información y automatiza los flujos de trabajo más comunes.
+
+La aplicación está diseñada para tres tipos de usuarios con perfiles y permisos diferenciados:
+
+<CardGroup cols={3}>
+  <Card title="Administrador" icon="shield-halved">
+    Gestión completa del sistema: usuarios, clases, grupos, membresías, contratos y capital de la academia.
+  </Card>
+  <Card title="Estudiante" icon="graduation-cap">
+    Reserva y cancela clases, se une a grupos, gestiona su membresía y califica las sesiones.
+  </Card>
+  <Card title="Docente" icon="chalkboard-user">
+    Inicia y finaliza clases asignadas, visualiza su historial de sesiones y calificaciones.
+  </Card>
+</CardGroup>
+
+## Funcionalidades principales
+
+<AccordionGroup>
+  <Accordion title="Gestión de usuarios">
+    El sistema soporta tres roles: **Administrador**, **Estudiante** y **Docente**. Cada rol tiene un conjunto de operaciones permitidas. Los administradores pueden crear, actualizar y eliminar cualquier usuario. Los estudiantes y docentes acceden mediante credenciales únicas y solo pueden realizar las operaciones de su perfil.
+  </Accordion>
+  <Accordion title="Clases y reservas">
+    NOUS ACADEMY gestiona dos tipos de clases:
+    - **Clases grupales**: tienen aforo mínimo y máximo, se pueden asignar a grupos y requieren al menos el aforo mínimo para iniciarse.
+    - **Clases personalizadas**: son sesiones uno a uno contratadas por estudiantes con clases privadas disponibles en su membresía.
+    
+    Las reservas tienen un ciclo de vida completo: PENDIENTE → EN_CURSO → EXITOSA/PREMATURA/TARDE/CANCELADA.
+  </Accordion>
+  <Accordion title="Membresías">
+    Los estudiantes pueden acceder a tres planes predefinidos o a un plan totalmente personalizado:
+    - **Básica**: $1.200.000/mes, solo clases grupales
+    - **Intensiva**: $2.200.000/mes, 4 clases privadas/mes
+    - **Premium**: $3.500.000/mes, 8 clases privadas/mes
+    - **Personalizada**: precio y clases privadas configurables por el administrador
+  </Accordion>
+  <Accordion title="Contratos de docentes">
+    Cada docente puede tener un contrato activo con salario base, horas mínimas comprometidas y costo por hora privada adicional. El sistema descuenta automáticamente el costo del contrato del capital de la academia al momento de firmarlo.
+  </Accordion>
+  <Accordion title="Grupos">
+    Los grupos permiten organizar estudiantes y docentes en colectivos. Un estudiante puede pertenecer a un máximo de **4 grupos**. Los administradores pueden asignar reservas a grupos para que todos los integrantes puedan verlas y unirse.
+  </Accordion>
+  <Accordion title="Capital de la academia">
+    La aplicación lleva un registro del capital disponible. Las membresías suman capital al registrarse, y los contratos de docentes lo reducen. Los administradores pueden inyectar o retirar capital manualmente, siempre con validación para evitar saldos negativos.
+  </Accordion>
+</AccordionGroup>
+
+## Tecnologías utilizadas
+
+| Componente | Tecnología |
+|---|---|
+| Lenguaje | Java |
+| Interfaz gráfica | Java Swing (Nimbus L&F) |
+| Persistencia | Serialización de objetos Java |
+| Patrón de diseño | MVC (Modelo-Vista-Controlador) |
+
+## Estructura del repositorio
+
+```
+src/com/nousacademy/
+├── boot/           # Carga inicial de datos persistidos
+├── contabilidad/   # Membresías, contratos y lógica financiera
+├── controller/     # AcademiaController — punto de entrada del negocio
+├── excepciones/    # Excepciones de dominio personalizadas
+├── interfacegrafica/ # Frames Swing, tema visual y utilidades UI
+├── modelo/         # Clase, ClaseGrupal, ClasePersonalizada, Grupo, Reserva
+├── pruebas/        # Clases de prueba por integrante del equipo
+└── usuarios/       # Usuario, Estudiante, Docente y enums de tipo
+```

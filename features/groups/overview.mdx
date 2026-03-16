@@ -1,0 +1,176 @@
+---
+title: 'Grupos — Vista general'
+description: 'Cómo funciona el sistema de grupos en Nous Academy: estructura, reglas de negocio y métodos del controlador.'
+---
+
+Un **Grupo** es la unidad organizativa que reúne estudiantes, docentes y reservas de clases en torno a un mismo programa de aprendizaje. El administrador crea y gestiona los grupos; los estudiantes se inscriben de forma autónoma.
+
+## Estructura del modelo
+
+```java
+// modelo/Grupo.java
+public class Grupo implements Serializable {
+
+    private static int serial = 0;
+    private String codigo;          // formato: GRUP + serial de 3 dígitos
+    private String nombre;
+    private String descripcion;
+    private Estudiante[] estudiantes = new Estudiante[0];
+    private Docente[]   docentes    = new Docente[0];
+    private Reserva[]   reservas    = new Reserva[0];
+}
+```
+
+<CardGroup cols={3}>
+  <Card title="Código" icon="tag">
+    Generado automáticamente con el prefijo `GRUP` y un serial de 3 dígitos: `GRUP001`, `GRUP002`, …
+  </Card>
+  <Card title="Participantes" icon="users">
+    Arreglos independientes para estudiantes (`Estudiante[]`) y docentes (`Docente[]`).
+  </Card>
+  <Card title="Reservas" icon="calendar">
+    Arreglo de `Reserva[]` que enlaza las clases programadas al grupo.
+  </Card>
+</CardGroup>
+
+## Generación del código
+
+```java
+// modelo/Grupo.java — generarCodigo()
+public String generarCodigo(String sufijo) {
+    serial++;
+    return sufijo + String.format("%03d", serial);
+}
+```
+
+El contador `serial` es estático, por lo que es compartido entre todas las instancias y garantiza unicidad dentro de la sesión.
+
+## Reglas de negocio
+
+### Límite de grupos por estudiante
+
+Un estudiante puede pertenecer a un máximo de **4 grupos** simultáneamente. Si intenta unirse a un quinto, se lanza `CantidadGruposExcedida`.
+
+```java
+// usuarios/Estudiante.java — addGrupo()
+public void addGrupo(Grupo grupo) throws CantidadGruposExcedida {
+    if (this.cantidadDeGrupos == 4) {
+        throw new CantidadGruposExcedida();
+    }
+    this.grupos = Arrays.copyOf(this.grupos, this.grupos.length + 1);
+    this.grupos[this.grupos.length - 1] = grupo;
+    this.actualizarCantidadGrupos();
+}
+```
+
+### Sin estudiantes duplicados
+
+Antes de añadir un estudiante, `anadirEstudiante()` recorre el arreglo en busca del mismo objeto. Si ya existe, lanza `Duplicados`.
+
+```java
+// modelo/Grupo.java — anadirEstudiante()
+public void anadirEstudiante(Estudiante estudiante)
+        throws CantidadGruposExcedida, Duplicados {
+    int i = 0;
+    while (i < this.estudiantes.length && estudiante != this.estudiantes[i]) {
+        i++;
+    }
+    if (i != this.estudiantes.length) {
+        throw new Duplicados();
+    }
+    estudiante.addGrupo(this);    // también actualiza el lado del estudiante
+    this.estudiantes = Arrays.copyOf(this.estudiantes, this.estudiantes.length + 1);
+    this.estudiantes[this.estudiantes.length - 1] = estudiante;
+}
+```
+
+<Note>
+La inscripción es **bidireccional**: al añadir un estudiante al grupo, el propio objeto `Estudiante` registra el grupo en su arreglo `grupos[]` mediante `addGrupo(this)`.
+</Note>
+
+## Relación con otros módulos
+
+```
+    Grupo
+    ├── Estudiante[]  ←→  Estudiante.grupos[]
+    ├── Docente[]         (solo lectura desde el docente)
+    └── Reserva[]         reservas compartidas del grupo
+```
+
+El grupo actúa como **punto de difusión**: cuando el administrador añade una `Reserva` al grupo, todos los estudiantes inscritos pueden verla y unirse a la clase sin necesidad de búsquedas individuales.
+
+## Métodos del controlador
+
+<AccordionGroup>
+  <Accordion title="crearGrupo(nombre, descripcion)">
+    Crea un nuevo `Grupo`, lo agrega al arreglo interno `grupos[]` del controlador y persiste el archivo `.grp` en `datos/`.
+
+    ```java
+    // controller/AcademiaController.java
+    public void crearGrupo(String nombre, String descripcion)
+            throws ElementosVacios, IOException {
+        Grupo g = new Grupo(nombre, descripcion);
+        this.grupos = Arrays.copyOf(this.grupos, this.grupos.length + 1);
+        this.grupos[this.grupos.length - 1] = g;
+        g.copiarFicheroGrupo(base + g.getCodigo() + ".grp");
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="actualizarGrupo(codigo, nombre, descripcion)">
+    Localiza el grupo por código y actualiza los campos no vacíos. Escribe el fichero `.grp` actualizado.
+
+    ```java
+    public void actualizarGrupo(String codigo, String nombre, String descripcion)
+            throws ElementoNoExistente, IOException {
+        Grupo g = buscarUnGrupo(codigo);
+        if (!(descripcion.isEmpty())) g.setDescripcion(descripcion);
+        if (!(nombre.isEmpty()))      g.setNombre(nombre);
+        g.copiarFicheroGrupo(base + g.getCodigo() + ".grp");
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="eliminarGrupo(codigo)">
+    Llama a `eliminacionAdministrativa()` para desvincular el grupo de todos los estudiantes, elimina el fichero `.grp` del disco y lo quita del arreglo del controlador.
+
+    ```java
+    public void eliminarGrupo(String codigo)
+            throws ElementoNoExistente, GrupoNoEncontrado {
+        // ... búsqueda por índice ...
+        this.grupos[i].eliminacionAdministrativa();
+        File f = new File(base + grupos[i].getCodigo() + ".grp");
+        f.delete();
+        this.grupos[i] = this.grupos[this.grupos.length - 1];
+        this.grupos = Arrays.copyOf(this.grupos, this.grupos.length - 1);
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="leerGrupos()">
+    Devuelve una copia defensiva del arreglo `grupos[]`.
+
+    ```java
+    public Grupo[] leerGrupos() {
+        return this.grupos.clone();
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Eliminación administrativa
+
+Cuando se elimina un grupo, `eliminacionAdministrativa()` recorre cada estudiante inscrito y llama a `e.eliminarGrupo(this)` para mantener la coherencia de los datos en ambos lados de la relación.
+
+```java
+// modelo/Grupo.java
+public void eliminacionAdministrativa() throws GrupoNoEncontrado {
+    for (Estudiante e : estudiantes) {
+        e.eliminarGrupo(this);
+    }
+}
+```
+
+<Warning>
+Eliminar un grupo es una operación **irreversible**. Todos los estudiantes quedan desvinculados inmediatamente y el fichero `.grp` se borra del disco.
+</Warning>

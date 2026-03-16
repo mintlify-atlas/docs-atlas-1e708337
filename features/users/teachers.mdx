@@ -1,0 +1,291 @@
+---
+title: Docentes
+description: Documentación del tipo de usuario Docente en NOUS ACADEMY — campos extendidos, contratos, calificación, horas trabajadas y métodos del controlador.
+---
+
+El **Docente** extiende la clase `Usuario` y tiene asignado el rol `TipoUsuario.DOCENTE`. Además de los campos base, gestiona contratos laborales, el historial de clases impartidas y una calificación acumulada calculada a partir de las valoraciones de los estudiantes.
+
+## Herencia
+
+```java
+// com/nousacademy/usuarios/Docente.java — línea 24
+public class Docente extends Usuario implements Serializable
+```
+
+El `Docente` hereda todos los campos de `Usuario` (`nombre`, `apellidos`, `telefono`, `correo`, `tipoDocumento`, `numeroDocumento`, `usuario`, `contrasena`) y añade los campos propios descritos a continuación.
+
+## Campos específicos del docente
+
+<ResponseField name="especialidad" type="String" required>
+  Área de especialización del docente. No puede ser vacía; se valida en el constructor. Es el único campo adicional requerido al crear un docente.
+</ResponseField>
+
+<ResponseField name="contrato" type="Contrato">
+  Contrato laboral activo. Inicia en `null`. Se asigna con `asignarContrato()`. No puede tener estado `FINALIZADO` al asignarse.
+</ResponseField>
+
+<ResponseField name="historialContratos" type="Contrato[]">
+  Arreglo de contratos anteriores. Cada vez que se asigna un nuevo contrato, el anterior se finaliza y se archiva aquí.
+</ResponseField>
+
+<ResponseField name="cantidadHorasTrabajadasMes" type="float">
+  Acumulado mensual de horas impartidas. Aumenta con cada clase finalizada mediante `trabajoDocente()`. Debe ser no negativo.
+</ResponseField>
+
+<ResponseField name="calificacion" type="float">
+  Calificación promedio del docente. Se recalcula completamente con `calificacionDocente()` a partir de las reservas calificadas en `historialClasesImpartidas`. Inicia en `0`.
+</ResponseField>
+
+<ResponseField name="horasPrivadasAdicionalesMes" type="float">
+  Horas privadas adicionales impartidas en el mes, más allá del mínimo contractual.
+</ResponseField>
+
+<ResponseField name="historialClasesImpartidas" type="Reserva[]">
+  Arreglo de todas las reservas que el docente ha impartido o tiene asignadas.
+</ResponseField>
+
+## Constructor
+
+```java
+// com/nousacademy/usuarios/Docente.java — línea 37
+public Docente(
+    String nombre, String apellidos, String telefono, String correo,
+    TipoDocumento tipoDocumento, String numeroDocumento,
+    String usuario, String contrasena, String especialidad)
+    throws ElementosVacios, CorreoNoValido, NombreNoValido, ValoresNegativos, LongitudNoValida {
+
+    super(nombre, apellidos, telefono, correo, tipoDocumento, numeroDocumento, usuario, contrasena);
+    if (especialidad.isEmpty()) {
+        throw new ElementosVacios();
+    }
+    this.especialidad = especialidad;
+    this.tipoUsuario = TipoUsuario.DOCENTE;
+    this.calificacion = 0;
+    this.historialClasesImpartidas = new Reserva[0];
+}
+```
+
+## Métodos de lógica de negocio
+
+### calificacionDocente()
+
+Recalcula el promedio de calificación del docente recorriendo todas las reservas en `historialClasesImpartidas` y promediando únicamente las que tienen el flag `calificada = true`:
+
+```java
+// com/nousacademy/usuarios/Docente.java — línea 209
+public void calificacionDocente() {
+    float suma = 0;
+    int n = 0; // reservas calificadas
+    for (Reserva r : this.historialClasesImpartidas) {
+        if (r.getCalificada()) {
+            suma += r.getCalificacionGeneral();
+            n++;
+        }
+    }
+    this.calificacion = suma / n;
+}
+```
+
+<Note>
+  Solo las reservas marcadas como calificadas (`r.getCalificada() == true`) contribuyen al promedio. Si ninguna reserva ha sido calificada, la división produce `NaN`.
+</Note>
+
+### trabajoDocente()
+
+Agrega al acumulado mensual la duración de la clase convertida a horas (duración en minutos dividida entre 60):
+
+```java
+// com/nousacademy/usuarios/Docente.java — línea 202
+public void trabajoDocente(Reserva reserva) {
+    this.cantidadHorasTrabajadasMes += (reserva.getClase().getDuracion() / 60.0);
+}
+```
+
+### asignarContrato()
+
+Asigna un nuevo contrato al docente. Si ya tenía uno activo, lo finaliza y lo archiva en `historialContratos`:
+
+```java
+// com/nousacademy/usuarios/Docente.java — línea 141
+public void asignarContrato(
+    LocalDate fechaInicio, double salarioBase,
+    double horasMinimas, double costoHoraPrivadaAdicional, int meses)
+    throws FechaInvalida, ValoresNegativos, EstadoContratoInvalido {
+
+    if (this.contrato != null) {
+        this.contrato.actualizarEstadoContrato(EstadoContrato.FINALIZADO);
+        this.contrato.setFechaFinalizacion(LocalDate.now());
+        this.historialContratos = Arrays.copyOf(
+            this.historialContratos, this.historialContratos.length + 1);
+        this.historialContratos[this.historialContratos.length - 1] = this.contrato;
+    }
+    this.contrato = new Contrato(fechaInicio, salarioBase, horasMinimas, costoHoraPrivadaAdicional, meses);
+}
+```
+
+### actualizarEstadoContrato()
+
+Cambia el estado del contrato activo. Si el nuevo estado es `FINALIZADO`, el contrato se elimina del campo `contrato` (queda en `null`):
+
+```java
+// com/nousacademy/usuarios/Docente.java — línea 157
+public void actualizarEstadoContrato(EstadoContrato estado)
+    throws EstadoContratoInvalido, ElementosVacios
+```
+
+<Warning>
+  Si el estado es `FINALIZADO`, `this.contrato` pasa a `null`. Cualquier intento posterior de operar sobre el contrato sin asignar uno nuevo lanzará una excepción.
+</Warning>
+
+## Métodos del controlador
+
+### Gestión del perfil
+
+<Tabs>
+  <Tab title="Crear">
+    ```java
+    // AcademiaController.java — línea 599
+    public void crearDocente(
+        String nombre, String apellidos, String telefono,
+        String correo, TipoDocumento tipoDocumento, String numeroDocumento,
+        String usuario, String contrasena, String especialidad)
+        throws ElementosVacios, CorreoNoValido, NombreNoValido,
+               IOException, ValoresNegativos, LongitudNoValida, Duplicados
+    ```
+    Valida duplicados por documento y por nombre de usuario. Persiste el fichero `.doce` en `datos/`.
+  </Tab>
+  <Tab title="Actualizar">
+    ```java
+    // AcademiaController.java — línea 623
+    public void actualizarDocente(
+        TipoDocumento originalTD, String originalND,
+        String nombre, String apellidos, String telefono,
+        String correo, TipoDocumento tipoDocumento, String numeroDocumento,
+        String especialidad)
+        throws CorreoNoValido, NombreNoValido, ElementoNoExistente, IOException, ValoresNegativos
+    ```
+    Solo modifica los campos no vacíos. Incluye `especialidad` como campo actualizable. Elimina el fichero `.doce` anterior y escribe uno nuevo.
+  </Tab>
+  <Tab title="Eliminar">
+    ```java
+    // AcademiaController.java — línea 667
+    public void eliminarDocente(TipoDocumento tipoDocumento, String numeroDocumento)
+        throws ElementoNoExistente
+    ```
+    Elimina el fichero `.doce` y compacta el arreglo `docentes[]`.
+
+    <Note>
+      Este método elimina el docente del sistema. Para retirar un docente de un grupo específico, utiliza `eliminarDocente(TipoDocumento, String, String)` que recibe el código del grupo como tercer parámetro.
+    </Note>
+  </Tab>
+  <Tab title="Leer">
+    ```java
+    // AcademiaController.java — línea 690
+    public Docente[] leerDocentes()
+    ```
+    Devuelve una copia defensiva del arreglo `docentes[]`.
+  </Tab>
+</Tabs>
+
+### Gestión de contratos
+
+<AccordionGroup>
+  <Accordion title="asignarContrato()">
+    Asigna un nuevo contrato al docente. Verifica que la academia tenga capital suficiente para cubrir el costo total (`salarioBase * meses`) antes de proceder.
+
+    ```java
+    // AcademiaController.java — línea 697
+    public void asignarContrato(
+        TipoDocumento tipoDocumento, String numeroDocumento,
+        LocalDate fechaInicio, double salarioBase, double horasMinimas,
+        double costoHoraA, int meses)
+        throws ElementoNoExistente, FechaInvalida, ValoresNegativos,
+               EstadoContratoInvalido, DineroInsuficienteParaContratar, IOException
+    ```
+
+    El capital de la academia se actualiza con el impacto comercial del contrato.
+  </Accordion>
+  <Accordion title="actualizarEstadoContratoDocente()">
+    Cambia el estado del contrato activo del docente.
+
+    ```java
+    // AcademiaController.java — línea 731
+    public void actualizarEstadoContratoDocente(
+        TipoDocumento tipoDocumento, String numeroDocumento, EstadoContrato estado)
+        throws EstadoContratoInvalido, ElementosVacios, ElementoNoExistente, IOException
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### Gestión de clases asignadas
+
+<Columns cols={2}>
+  <Card title="asignarClase()" icon="chalkboard-teacher">
+    Asigna una reserva existente al docente. Actualiza tanto el fichero `.doce` como el fichero `.res` de la reserva.
+
+    ```java
+    // AcademiaController.java — línea 742
+    public void asignarClase(
+        TipoDocumento tipoDocumento, String numeroDocumento, String codigo)
+        throws ElementoNoExistente, IOException
+    ```
+  </Card>
+  <Card title="cancelarDocente()" icon="user-slash">
+    Retira al docente de una reserva. Lanza `NingunDocenteAsignado` si la reserva no tiene docente asignado.
+
+    ```java
+    // AcademiaController.java — línea 751
+    public void cancelarDocente(
+        TipoDocumento tipoDocumento, String numeroDocumento, String codigo)
+        throws ElementoNoExistente, NingunDocenteAsignado, ReservaNoEnDocente, IOException
+    ```
+  </Card>
+</Columns>
+
+### Gestión de docentes en grupos
+
+```java
+// AcademiaController.java — línea 929
+// Añadir un docente a un grupo
+public void añadirDocente(TipoDocumento tipoDocumento, String numeroDocumento, String codigo)
+    throws ElementoNoExistente, IOException
+
+// AcademiaController.java — línea 966
+// Retirar un docente de un grupo
+public void eliminarDocente(TipoDocumento tipoDocumento, String numeroDocumento, String codigo)
+    throws ElementoNoExistente, DocenteNoEnGrupo, IOException
+```
+
+<Tip>
+  Ambos métodos reciben el código del **grupo** como tercer parámetro (`codigo`), y actualizan tanto el fichero `.doce` del docente como el fichero `.grp` del grupo.
+</Tip>
+
+## Persistencia en disco
+
+Cada docente se serializa como un fichero binario en el directorio `datos/`:
+
+```java
+// com/nousacademy/usuarios/Docente.java — línea 228
+public void copiarFicheroDocente(String dir) throws IOException {
+    FileOutputStream f = new FileOutputStream(dir);
+    ObjectOutputStream b = new ObjectOutputStream(f);
+    b.writeObject((Docente) this);
+    b.close();
+    f.close();
+}
+```
+
+**Convención de nombre de fichero:**
+
+```
+datos/<primeras2letrasDelTipoDocumento><numeroDocumento>.doce
+```
+
+**Ejemplos:**
+
+| `tipoDocumento` | `numeroDocumento` | Nombre del fichero       |
+| --------------- | ----------------- | ------------------------ |
+| `CC`            | `10234567`        | `datos/CC10234567.doce`  |
+| `CE`            | `98765`           | `datos/CE98765.doce`     |
+
+La clase implementa `java.io.Serializable` con `serialVersionUID = 8389739L`.
